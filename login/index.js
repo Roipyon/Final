@@ -60,15 +60,13 @@ async function postInfo(ele1,ele2,identity)
             password: password,
             identity: identity
         })
-    }).then(response => {
-        if (response.status === 302)
-        {
-            const location = response.headers.get('Location');
-            if (location) window.location.href = location;
-            return;
-        }
-        return response.json();
     });
+    console.log(response);
+    if (response.redirected) 
+    {
+        window.location.href = response.url;
+        return;
+    }
     const resJson = await response.json();
     if (!resJson.success) 
     {
