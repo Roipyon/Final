@@ -1,6 +1,7 @@
 const express = require('express');
 // const bcrypt = require('bcrypt');
 const mysql = require('mysql2/promise');
+const session = require('express-session');
 const app = express();
 const PORT = 5000;
 const HOST = '0.0.0.0';
@@ -21,7 +22,7 @@ const pool = mysql.createPool(poolConfig);
 
 function isStudent(req,res,next)
 {
-    if (1)
+    if (req.session.identity === 'student')
     {
         return next();
     }
@@ -29,7 +30,7 @@ function isStudent(req,res,next)
 }
 function isTeacher(req,res,next)
 {
-    if (1)
+    if (req.session.identity === 'teacher')
     {
         return next();
     }
@@ -37,7 +38,7 @@ function isTeacher(req,res,next)
 }
 function isAdmin(req,res,next)
 {
-    if (1)
+    if (req.session.identity === 'admin')
     {
         return next();
     }
@@ -46,6 +47,12 @@ function isAdmin(req,res,next)
 
 app.use('/',express.static('login'));
 app.use(express.json());
+app.use(session({
+    secret: 'thisisaflowofpassword',
+    resave: false,
+    saveUninitialized: false,
+    cookie: {secure: false}
+}))
 
 app.post('/',async(req,res)=>{
     const { account,password,identity } = req.body;
@@ -64,8 +71,25 @@ app.post('/',async(req,res)=>{
         res.json({success: false,message: '密码包含非法字符！'});
         return;
     }
-    const rows = await pool.query('select account,password from users where identity=? and account=?',[identity,account]);
-    
+    try {
+        const [rows] = await pool.query('select account,password from users where identity=? and account=?',[identity,account]);
+        if (password === rows[0].password)
+        {
+            req.session.identity = identity;
+            req.session.account = account;
+        }
+        if (identity === 'student') res.redirect('/student');
+        else if (identity === 'teacher') res.redirect('/teacher');
+        else if (identity === 'admin') res.redirect('/admin');
+    }
+    catch (err)
+    {
+        console.error(err);
+    }
+});
+
+app.get('/student',isStudent,(req,res)=>{
+    res.send('ok');
 });
 
 app.listen(PORT,()=>{

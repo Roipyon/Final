@@ -60,6 +60,14 @@ async function postInfo(ele1,ele2,identity)
             password: password,
             identity: identity
         })
+    }).then(response => {
+        if (response.status === 302)
+        {
+            const location = response.headers.get('Location');
+            if (location) window.location.href = location;
+            return;
+        }
+        return response.json();
     });
     const resJson = await response.json();
     if (!resJson.success) 
@@ -69,23 +77,23 @@ async function postInfo(ele1,ele2,identity)
     }
 }
 
-loginBtn.addEventListener('click',async()=>{
+loginBtn.addEventListener('click',()=>{
     if (chosen.id === 'stu')
     {
         const stuAccount = document.querySelector('#stuAccount');
         const stuPassWord = document.querySelector('#stuPassWord');
-        await postInfo(stuAccount,stuPassWord,'student');
+        postInfo(stuAccount,stuPassWord,'student');
     }
     else if (chosen.id === 'tea')
     {
         const teaAccount = document.querySelector('#teaAccount');
         const teaPassWord = document.querySelector('#teaPassWord');
-        await postInfo(teaAccount,teaPassWord,'teacher');
+        postInfo(teaAccount,teaPassWord,'teacher');
     }
     else if (chosen.id === 'adm')
     {
         const admAccount = document.querySelector('#admAccount');
         const admPassWord = document.querySelector('#admPassWord');
-        await postInfo(admAccount,admPassWord,'admin');
+        postInfo(admAccount,admPassWord,'admin');
     }
 });
