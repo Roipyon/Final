@@ -1,0 +1,87 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+body {
+    background-color: rgba(17, 117, 231, 0.171);
+}
+#login {
+    width: 500px;
+    height: 500px;
+    position: absolute;
+    top: 0;
+    right: 0;
+    left: 0;
+    bottom: 0;
+    margin: auto;
+    background-color: white;
+    border-radius: 25px;
+    box-shadow: 0 0 10px rgba(150, 150, 150, 0.253);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-evenly;
+    align-items: center;
+}
+#logo {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: center;
+}
+#logo svg {
+    width: 4em;
+    height: 4em;
+}
+#logo p {
+    font-size: 30px;
+    font-weight: bold;
+}
+#choose {
+    display: grid;
+    justify-content: space-evenly;
+    align-items: center;
+    grid-template-columns: 1fr 1fr 1fr;
+    width: 90%;
+    height: 50px;
+    background-color: rgba(52, 135, 230, 0.062);
+    border-radius: 20px;
+}
+.chooseBtn {
+    height: 40px;
+    margin: 0 5px;
+    border-radius: 20px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+}
+.chooseBtn.active {
+    transition: all 0.3s;
+    box-shadow: 0 0 10px rgba(150, 150, 150, 0.253);
+    background-color: white;
+}
+.input {
+    border: 1px solid rgba(17, 117, 231, 0.171);
+    outline: none;
+    padding: 15px 20px;
+    width: 450px;
+    border-radius: 20px;
+    margin: 10px 0;
+}
+.input.false {
+    border: 1px solid rgb(255, 0, 0);
+}
+#loginBtn {
+    width: 450px;
+    height: 50px;
+    background-color: #2d3a5d;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: white;
+    font-weight: bold;
+    font-size: 18px;
+    border-radius: 20px;
+    cursor: pointer;
+}

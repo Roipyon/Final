@@ -1,0 +1,171 @@
+# 通用 Git 忽略文件（常规模板）
+# 可根据项目需要删减或扩展
+
+# 操作系统
+.DS_Store
+Thumbs.db
+desktop.ini
+ehthumbs.db
+Icon?
+._*
+
+# 临时文件 / 编辑器
+*~
+*.swp
+*.swo
+*.swn
+*.tmp
+*.temp
+
+# IDEs / 编辑器
+.vscode/
+.idea/
+*.iml
+*.ipr
+*.iws
+*.sublime-workspace
+*.sublime-project
+
+# Visual Studio / .NET
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.ncb
+*.cache
+[Aa][Dd][Jj]*/bin/
+*.cache
+bin/
+obj/
+
+# Node.js / JavaScript
+node_modules/
+npm-debug.log*
+yarn-error.log
+.pnpm-debug.log
+.cache/
+dist/
+build/
+out/
+coverage/
+.nyc_output/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+ENV/
+.venv/
+pip-wheel-metadata/
+*.egg-info/
+build/
+dist/
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Java / JVM / Maven / Gradle
+target/
+build/
+.gradle/
+.idea/
+*.class
+*.jar
+*.war
+*.ear
+hs_err_pid*
+.gradle/
+.settings/
+
+# Go
+bin/
+pkg/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Ruby
+*.gem
+*.rbc
+*.bundle
+vendor/bundle
+.log
+tmp/
+coverage/
+doc/
+*.rvmrc
+.ruby-version
+.ruby-gemset
+
+# PHP
+vendor/
+composer.lock
+
+# Rust
+target/
+**/*.rs.bk
+
+# C / C++
+*.obj
+*.o
+*.so
+*.exe
+*.out
+*.app
+*.ilk
+*.pdb
+*.idb
+
+# Android / iOS
+*.apk
+*.ap_/
+*.keystore
+*.hprof
+*.iml
+local.properties
+*.lock
+*.orig
+
+# Docker / envs / secrets
+.env
+.env.*.local
+.env.local
+docker-compose.override.yml
+docker-compose.*.yml
+
+# Logs
+*.log
+logs/
+*.log.*
+npm-debug.log*
+
+# Archives / backups
+*.zip
+*.tar.gz
+*.rar
+*.7z
+*.bak
+*.old
+
+# Certificates / keys / secrets
+*.pem
+*.key
+*.crt
+*.p12
+*.jks
+
+# Misc
+.idea/
+.vscode/
+coverage/
+.DS_Store
+Thumbs.db
+
+# End of file
