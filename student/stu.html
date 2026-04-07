@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>成绩后台管理系统</title>
+    <link rel="stylesheet" href="stu.css">
+</head>
+<body>
+    <div class="main-layout">
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-logo">
+            <h3>学生中心</h3>
+        </div>
+        <ul class="sidebar-menu">
+            <li><a href="javascript:void(0)" data-nav="home" class="active">首页</a></li>
+            <li><a href="javascript:void(0)" data-nav="score">我的成绩</a></li>
+            <li><a href="javascript:void(0)" data-nav="notice">班级通知</a></li>
+        </ul>
+    </aside>
+
+    <div class="content-wrapper">
+        <header class="header">
+            <div class="menu-toggle" onclick="document.getElementById('sidebar').classList.toggle('show')">☰</div>
+            <div class="page-title" id="pageTitle">学生首页</div>
+            <div class="user-info">
+                <div class="user-avatar">李</div>
+                <span>李明</span>
+                <button class="btn-default" id="logoutBtn">退出</button>
+            </div>
+        </header>
+
+        <main class="main-content">
+            <!-- 三个模块容器，动态填充内容 -->
+            <div class="card section active" id="homeSection"></div>
+            <div class="card section" id="scoreSection"></div>
+            <div class="card section" id="noticeSection"></div>
+        </main>
+    </div>
+</div>
+</body>
+<script src="stu.js"></script>
+</html>

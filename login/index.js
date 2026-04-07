@@ -61,7 +61,6 @@ async function postInfo(ele1,ele2,identity)
             identity: identity
         })
     });
-    console.log(response);
     if (response.redirected) 
     {
         window.location.href = response.url;

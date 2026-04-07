@@ -1,5 +1,6 @@
 const express = require('express');
 // const bcrypt = require('bcrypt');
+const path = require('path');
 const mysql = require('mysql2/promise');
 const session = require('express-session');
 const app = express();
@@ -45,7 +46,6 @@ function isAdmin(req,res,next)
     res.redirect('/');
 }
 
-app.use('/',express.static('login'));
 app.use(express.json());
 app.use(session({
     secret: 'thisisaflowofpassword',
@@ -53,6 +53,9 @@ app.use(session({
     saveUninitialized: false,
     cookie: {secure: false}
 }))
+
+app.use('/student', isStudent, express.static('student'));
+app.use('/', express.static('login'));
 
 app.post('/',async(req,res)=>{
     const { account,password,identity } = req.body;
@@ -73,14 +76,22 @@ app.post('/',async(req,res)=>{
     }
     try {
         const [rows] = await pool.query('select account,password from users where identity=? and account=?',[identity,account]);
+        if (!rows || rows.length === 0) {
+            res.json({success: false, message: '用户不存在！'});
+            return;
+        }
         if (password === rows[0].password)
         {
             req.session.identity = identity;
             req.session.account = account;
+            if (identity === 'student') res.redirect('/student');
+            else if (identity === 'teacher') res.redirect('/teacher');
+            else if (identity === 'admin') res.redirect('/admin');
         }
-        if (identity === 'student') res.redirect('/student');
-        else if (identity === 'teacher') res.redirect('/teacher');
-        else if (identity === 'admin') res.redirect('/admin');
+        else 
+        {
+            res.json({success: false,message:'密码不正确！'});
+        }
     }
     catch (err)
     {
@@ -89,7 +100,19 @@ app.post('/',async(req,res)=>{
 });
 
 app.get('/student',isStudent,(req,res)=>{
-    res.send('ok');
+    res.sendFile(path.join(__dirname, 'student', 'stu.html'));
+});
+
+app.post('/student',isStudent,(req,res)=>{
+    
+});
+
+app.get('/logout',async(req,res)=>{
+    req.session.destroy((err)=>{
+        if (err) res.status.send('注销失败！');
+    });
+    res.clearCookie('connect.sid');
+    res.redirect('/');
 });
 
 app.listen(PORT,()=>{
