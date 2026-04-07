@@ -103,6 +103,28 @@ app.get('/student',isStudent,(req,res)=>{
     res.sendFile(path.join(__dirname, 'student', 'stu.html'));
 });
 
+app.get('/student/info',isStudent,async(req,res)=>{
+    const account = req.session.account;
+    console.log(account)
+    const [rows] = await pool.query('select id,account,identity,real_name from users where account = ?',[account]);
+    const userId = rows[0].id;
+    console.log(userId)
+    const realName = rows[0].real_name;
+    console.log(realName)
+    const [_rows] = await pool.query('select class_id from class_members where student_id = ?',[userId]);
+    const classId = _rows[0].class_id;
+    console.log(classId)
+    const [__rows] = await pool.query('select class_name from classes where id = ?',[classId]);
+    const className = __rows[0].class_name;
+    console.log(className)
+    res.json({
+        id: userId,
+        name: realName,
+        'className': className,
+        classId: classId,
+    });
+});
+
 app.post('/student',isStudent,(req,res)=>{
     
 });
