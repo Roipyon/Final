@@ -129,7 +129,7 @@
                     ${topNotices.length ? topNotices.map(notice => `
                         <div class="recent-notice-item ${notice.isRead ? '' : 'unread'}" data-id="${notice.id}" style="cursor:pointer;">
                             <div style="font-weight:600;">${notice.title} ${!notice.isRead ? '<span class="notice-badge-sm">未读</span>' : ''}</div>
-                            <div style="font-size:12px; color:var(--gray); margin-top:4px;">${notice.publishTime}</div>
+                            <div style="font-size:12px; color:var(--gray); margin-top:4px;">${new Date(notice.publishTime).toLocaleString()}</div>
                         </div>
                     `).join('') : '<div class="empty-tip" style="padding:20px;text-align:center;">暂无通知</div>'}
                 </div>
@@ -240,7 +240,7 @@
                             ${!notice.isRead ? '<span class="notice-badge-sm">未读</span>' : '<span style="font-size:11px; color:var(--gray);">已读</span>'}
                         </div>
                         <div class="notice-content">${notice.content}</div>
-                        <div class="notice-time">${notice.publishTime} | 班主任：${notice.teacher_name}</div>
+                        <div class="notice-time">${new Date(notice.publishTime).toLocaleString()} | 班主任：${notice.teacher_name}</div>
                     </div>
                 `).join('') : '<div class="empty-tip" style="padding:30px;text-align:center;">暂无通知</div>'}
             </div>
