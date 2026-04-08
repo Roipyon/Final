@@ -209,23 +209,49 @@ app.get('/student/classstat',isStudent,async(req,res)=>{
             select cm.class_id,
             max(s.exam_date) as lastest_exam
             from class_members cm
-            join scores s on s.class.id = cm.class_id and s.exam_date = sl.lastest_exam
+            join scores s on s.class_id = cm.class_id
             where cm.student_id = ? and cm.status = 1
             group by cm.class_id
         ),
         subject_info as (
             select
                 s.subject,
-                avg(s.score) over (partition by s.subject) as subject_avg,
-                max(s.score) over (partition by s.subject) as subject_max,
-                min(s.score) over (partition by s.subject) as subject_min,
+                avg(s.score) as subject_avg,
+                max(s.score) as subject_max,
+                min(s.score) as subject_min,
+                count(*) as total_count,
+                count(case when s.score >= s.full_mark*0.6 then 1 end) as pass_count
             from scores s 
             join student_lastest sl on s.class_id = sl.class_id and s.exam_date = sl.lastest_exam
             group by s.subject
-        )
+            )
             select 
-        `)
-    res.json();
+                subject,
+                round(subject_avg,1) as avg,
+                subject_max as max,
+                subject_min as min,
+                pass_count as passCount,
+                total_count as totalStu,
+                concat(round(pass_count*100 / total_count, 2),'%') as passRate
+            from subject_info
+        `,[userId])
+    res.json(classStat);
+});
+
+// 获取通知
+app.get('/student/notices',isStudent,async(req,res)=>{
+    const account = req.session.account;
+    const [rows] = await pool.query('select id,account,identity,real_name from users where account = ?',[account]);
+    const userId = rows[0].id;
+    const [notices] = await pool.query(`
+        with current_class_id as (
+            select 
+                cm.class_id
+            from class_members cm where student_id = ?
+        )
+        select * from notices n join current_class_id cci on cci.class_id = n.class_id
+    `,[userId]);
+    res.json(notices);
 });
 
 app.get('/logout',async(req,res)=>{

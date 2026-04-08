@@ -15,14 +15,9 @@
     personalTotal = await _response.json();
     
     // 班级统计数据（按科目维度）
-    const classStatBySubject = {
-        "语文": { avg: 118.5, max: 138, min: 82, passCount: 42, totalStu: 48, passRate: "87.5%" },
-        "数学": { avg: 128.2, max: 150, min: 79, passCount: 44, totalStu: 48, passRate: "91.7%" },
-        "英语": { avg: 115.0, max: 142, min: 68, passCount: 39, totalStu: 48, passRate: "81.3%" },
-        "物理": { avg: 78.3, max: 98, min: 52, passCount: 36, totalStu: 48, passRate: "75.0%" },
-        "化学": { avg: 79.6, max: 96, min: 60, passCount: 37, totalStu: 48, passRate: "77.1%" },
-        "生物": { avg: 81.4, max: 99, min: 58, passCount: 38, totalStu: 48, passRate: "79.2%" }
-    };
+    let classStatBySubject = null;
+    _response = await fetch('/student/classstat',{method: 'get'});
+    classStatBySubject = await _response.json();
 
     // 班级通知数据（含已读未读）
     let notices = [
@@ -160,13 +155,17 @@
 
     // ---------- 成绩模块渲染（个人成绩 + 班级统计 + 科目筛选）----------
     function renderScoreModule() {
-        const stat = classStatBySubject[currentSubjectFilter];
+        let stat = null;
+        classStatBySubject.forEach(e=>{
+            if (e.subject === currentSubjectFilter)
+            {stat = e;return;}
+        });
         const scoreHtml = `
             <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; margin-bottom:16px;">
                 <h3>我的成绩 · ${currentStudent.className}</h3>
                 <div class="filter-bar">
                     <select id="subjectFilterSelect" class="filter-select">
-                        ${Object.keys(classStatBySubject).map(sub => `<option value="${sub}" ${sub === currentSubjectFilter ? 'selected' : ''}>${sub}</option>`).join('')}
+                        ${Array.from(classStatBySubject).map(sub => `<option value="${sub.subject}" ${sub.subject === currentSubjectFilter ? 'selected' : ''}>${sub.subject}</option>`).join('')}
                     </select>
                 </div>
             </div>
