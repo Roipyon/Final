@@ -20,15 +20,9 @@
     classStatBySubject = await _response.json();
 
     // 班级通知数据（含已读未读）
-    let notices = [
-        { id: 101, title: "期中考试安排通知", content: "下周三（4月16日）进行期中考试，考试科目为语文、数学、英语、物理、化学，请各位同学提前复习，做好备考准备。", publishTime: "2025-04-07 14:30", isRead: false },
-        { id: 102, title: "五一假期安全提醒", content: "五一假期（5月1日-5月5日）期间，请勿前往人员密集场所，注意交通安全和居家安全，按时完成假期作业。", publishTime: "2025-04-20 09:15", isRead: false },
-        { id: 103, title: "班级卫生值日调整", content: "自4月10日起，班级卫生值日小组进行轮换调整，具体分组表已张贴在教室公告栏，请各位同学按照新分组执行值日任务。", publishTime: "2025-04-08 10:00", isRead: false },
-        { id: 104, title: "春季运动会报名通知", content: "学校将于4月25日举办春季运动会，设有跑步、跳远、跳绳等项目，有意向报名的同学请于4月12日前到体育委员处登记。", publishTime: "2025-04-05 08:20", isRead: true },
-        { id: 105, title: "课后服务选课提醒", content: "本学期课后服务第二轮选课将于4月10日开启，可选课程包括编程、书法、篮球等，请家长协助学生完成选课。", publishTime: "2025-04-01 17:45", isRead: true },
-        { id: 106, title: "数学作业补充通知", content: "完成练习册P45-48，周三课前检查，请同学们互相提醒。", publishTime: "2025-04-06 11:20", isRead: false },
-        { id: 107, title: "英语听力训练计划", content: "每日早晚各20分钟听力打卡，班级群内提交截图。", publishTime: "2025-04-02 09:30", isRead: true }
-    ];
+    let notices = null;
+    _response = await fetch('/student/notices',{method: 'get'});
+    notices = Array.from(await _response.json());
 
     // 通知分页与筛选状态
     let currentNoticePage = 1;
@@ -58,10 +52,19 @@
     }
 
     // 标记通知为已读
-    function markNoticeAsRead(noticeId) {
+    async function markNoticeAsRead(noticeId) {
         const notice = notices.find(n => n.id === noticeId);
         if (notice && !notice.isRead) {
             notice.isRead = true;
+            // 状态更新至后端
+            const response = await fetch('/student/notices',{
+                method: 'post',
+                headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({
+                    notice_id: noticeId,
+                    is_read: 1
+                })
+            });
             // 重新渲染当前活动模块
             const activeNav = document.querySelector('.sidebar-menu a.active')?.getAttribute('data-nav');
             if (activeNav === 'notice') {
@@ -237,7 +240,7 @@
                             ${!notice.isRead ? '<span class="notice-badge-sm">未读</span>' : '<span style="font-size:11px; color:var(--gray);">已读</span>'}
                         </div>
                         <div class="notice-content">${notice.content}</div>
-                        <div class="notice-time">${notice.publishTime} | 班主任：王老师</div>
+                        <div class="notice-time">${notice.publishTime} | 班主任：${notice.teacher_name}</div>
                     </div>
                 `).join('') : '<div class="empty-tip" style="padding:30px;text-align:center;">暂无通知</div>'}
             </div>

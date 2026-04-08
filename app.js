@@ -124,7 +124,7 @@ app.get('/student/info',isStudent,async(req,res)=>{
 // 获取当前学生班级和成绩信息
 app.get('/student/grade',isStudent,async(req,res)=>{
     const account = req.session.account;
-    const [rows] = await pool.query('select id,account,identity,real_name from users where account = ?',[account]);
+    const [rows] = await pool.query('select id from users where account = ?',[account]);
     const userId = rows[0].id;
     const [subjectRows] = await pool.query(`
         WITH student_info AS (
@@ -160,7 +160,7 @@ app.get('/student/grade',isStudent,async(req,res)=>{
 // 获取总排名
 app.get('/student/totalrank',isStudent,async(req,res)=>{
     const account = req.session.account;
-    const [rows] = await pool.query('select id,account,identity,real_name from users where account = ?',[account]);
+    const [rows] = await pool.query('select id from users where account = ?',[account]);
     const userId = rows[0].id;
     const [totalRank] = await pool.query(`
         with student_lastest as (
@@ -175,26 +175,29 @@ app.get('/student/totalrank',isStudent,async(req,res)=>{
         class_scores as (
             select 
                 s.student_id,
-                sum(s.score) as total_score,
-                avg(s.score) as avg_score
+                sum(s.score) as total_score
             from scores s
             join student_lastest sl on sl.class_id = s.class_id and s.exam_date = sl.lastest_exam
             group by s.student_id
+        ),
+        class_total_avg as (
+            select avg(total_score) as class_total_avg_score
+            from class_scores
         ),
         ranked as (
             select 
                 student_id,
                 total_score,
-                avg_score,
                 rank() over (order by total_score desc) as class_rank
             from class_scores
         )
         select 
-            total_score as total,
-            avg_score as totalAvg,
-            class_rank as totalRank
-        from ranked
-        where student_id = ?
+            r.total_score as total,
+            cta.class_total_avg_score as totalAvg,
+            r.class_rank as totalRank
+        from ranked r
+        cross join class_total_avg cta
+        where r.student_id = ?
         `,[userId,userId]);
     res.json(totalRank[0]);
 });
@@ -202,7 +205,7 @@ app.get('/student/totalrank',isStudent,async(req,res)=>{
 // 班级统计数据
 app.get('/student/classstat',isStudent,async(req,res)=>{
     const account = req.session.account;
-    const [rows] = await pool.query('select id,account,identity,real_name from users where account = ?',[account]);
+    const [rows] = await pool.query('select id from users where account = ?',[account]);
     const userId = rows[0].id;
     const [classStat] = await pool.query(`
         with student_lastest as (
@@ -241,17 +244,39 @@ app.get('/student/classstat',isStudent,async(req,res)=>{
 // 获取通知
 app.get('/student/notices',isStudent,async(req,res)=>{
     const account = req.session.account;
-    const [rows] = await pool.query('select id,account,identity,real_name from users where account = ?',[account]);
+    const [rows] = await pool.query('select id from users where account = ?',[account]);
     const userId = rows[0].id;
     const [notices] = await pool.query(`
         with current_class_id as (
-            select 
+            select
                 cm.class_id
             from class_members cm where student_id = ?
         )
-        select * from notices n join current_class_id cci on cci.class_id = n.class_id
-    `,[userId]);
+        select
+            n.id,
+            n.title,
+            n.content,
+            n.publish_time as publishTime,
+            u.real_name as teacher_name,
+            (select 1 from notice_read_status where notice_id = n.id and student_id =?) as isRead
+        from notices n, users u, current_class_id cci
+        where n.publisher_id = u.id and n.is_deleted = 0 and n.class_id = cci.class_id
+        order by n.publish_time desc;
+    `,[userId,userId]);
     res.json(notices);
+});
+
+// 学生已读通知
+app.post('/student/notices',isStudent,async(req,res)=>{
+    const response = req.body;
+    const notice_id = response.notice_id;
+    const is_read = response.is_read;
+    const account = req.session.account;
+    const [rows] = await pool.query('select id from users where account = ?',[account]);
+    const userId = rows[0].id;
+    const [update] = await pool.query('insert into notice_read_status (notice_id,student_id,is_read,read_time) values (?,?,?,now())',[notice_id,userId,is_read]);
+    if (update[0].affectedRows === 1) res.json({success: true,message: '确认已读'});
+    else res.json({success: false,message: '已读失败'});
 });
 
 app.get('/logout',async(req,res)=>{
