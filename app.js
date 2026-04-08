@@ -103,30 +103,129 @@ app.get('/student',isStudent,(req,res)=>{
     res.sendFile(path.join(__dirname, 'student', 'stu.html'));
 });
 
+// 获取当前学生用户信息
 app.get('/student/info',isStudent,async(req,res)=>{
     const account = req.session.account;
-    console.log(account)
     const [rows] = await pool.query('select id,account,identity,real_name from users where account = ?',[account]);
     const userId = rows[0].id;
-    console.log(userId)
     const realName = rows[0].real_name;
-    console.log(realName)
     const [_rows] = await pool.query('select class_id from class_members where student_id = ?',[userId]);
     const classId = _rows[0].class_id;
-    console.log(classId)
     const [__rows] = await pool.query('select class_name from classes where id = ?',[classId]);
     const className = __rows[0].class_name;
-    console.log(className)
     res.json({
         id: userId,
         name: realName,
-        'className': className,
+        className: className,
         classId: classId,
     });
 });
 
-app.post('/student',isStudent,(req,res)=>{
-    
+// 获取当前学生班级和成绩信息
+app.get('/student/grade',isStudent,async(req,res)=>{
+    const account = req.session.account;
+    const [rows] = await pool.query('select id,account,identity,real_name from users where account = ?',[account]);
+    const userId = rows[0].id;
+    const [subjectRows] = await pool.query(`
+        WITH student_info AS (
+            SELECT 
+                cm.class_id,
+                (SELECT MAX(exam_date) FROM scores WHERE student_id = ?) AS latest_exam
+            FROM class_members cm
+            WHERE cm.student_id = ? AND cm.status = 1
+            LIMIT 1
+            ),
+        class_stats AS (
+            SELECT 
+                s.student_id,
+                s.subject,
+                s.score,
+                AVG(s.score) OVER (PARTITION BY s.subject) AS classAvg,
+                RANK() OVER (PARTITION BY s.subject ORDER BY s.score DESC) AS classRank
+            FROM scores s
+            JOIN student_info si
+                ON s.class_id = si.class_id
+                AND s.exam_date = si.latest_exam
+        )
+        SELECT 
+            subject,
+            score,
+            ROUND(classAvg, 1) AS classAvg,
+            classRank
+        FROM class_stats
+        WHERE student_id = ?;`,[userId,userId,userId]);
+    res.json(subjectRows);
+});
+
+// 获取总排名
+app.get('/student/totalrank',isStudent,async(req,res)=>{
+    const account = req.session.account;
+    const [rows] = await pool.query('select id,account,identity,real_name from users where account = ?',[account]);
+    const userId = rows[0].id;
+    const [totalRank] = await pool.query(`
+        with student_lastest as (
+            select 
+                cm.class_id,
+                max(s.exam_date) as lastest_exam
+            from class_members cm
+            join scores s on s.student_id = cm.student_id
+            where cm.student_id = ? and cm.status = 1
+            group by cm.class_id
+        ),
+        class_scores as (
+            select 
+                s.student_id,
+                sum(s.score) as total_score,
+                avg(s.score) as avg_score
+            from scores s
+            join student_lastest sl on sl.class_id = s.class_id and s.exam_date = sl.lastest_exam
+            group by s.student_id
+        ),
+        ranked as (
+            select 
+                student_id,
+                total_score,
+                avg_score,
+                rank() over (order by total_score desc) as class_rank
+            from class_scores
+        )
+        select 
+            total_score as total,
+            avg_score as totalAvg,
+            class_rank as totalRank
+        from ranked
+        where student_id = ?
+        `,[userId,userId]);
+    res.json(totalRank[0]);
+});
+
+// 班级统计数据
+app.get('/student/classstat',isStudent,async(req,res)=>{
+    const account = req.session.account;
+    const [rows] = await pool.query('select id,account,identity,real_name from users where account = ?',[account]);
+    const userId = rows[0].id;
+    const [classStat] = await pool.query(`
+        with student_lastest as (
+            select cm.class_id,
+            max(s.exam_date) as lastest_exam
+            from class_members cm
+            join scores s on s.class.id = cm.class_id and s.exam_date = sl.lastest_exam
+            where cm.student_id = ? and cm.status = 1
+            group by cm.class_id
+        ),
+        subject_info as (
+            select
+                s.subject,
+                avg(s.score) over (partition by s.subject) as subject_avg,
+                max(s.score) over (partition by s.subject) as subject_max,
+                min(s.score) over (partition by s.subject) as subject_min,
+            from scores s 
+            join student_lastest sl on s.class_id = sl.class_id and s.exam_date = sl.lastest_exam
+            group by s.subject
+        )
+            select 
+        `)
+    res.json();
 });
 
 app.get('/logout',async(req,res)=>{
@@ -138,5 +237,5 @@ app.get('/logout',async(req,res)=>{
 });
 
 app.listen(PORT,()=>{
-    console.log('ok');
+    console.log('system launched on http://127.0.0.1:5000');
 })

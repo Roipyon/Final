@@ -1,28 +1,19 @@
-// const currentStudent = {
-//     id: 1001,
-//     name: "李明",
-//     className: "高三(1)班",
-//     classId: 1,
-//     role: "student"
-// };
-
 (async ()=>{
+    // 登录用户信息
     let currentStudent = null;
-    const _response = await fetch('/student/info',{
-        method: 'get'
-    });
+    let _response = await fetch('/student/info',{method: 'get'});
     currentStudent = await _response.json();
 
-    // 个人成绩（含班级平均分、班级排名）
-    const personalScores = [
-        { subject: "语文", score: 132, classAvg: 118.5, classRank: 12, fullMark: 150 },
-        { subject: "数学", score: 145, classAvg: 128.2, classRank: 5, fullMark: 150 },
-        { subject: "英语", score: 128, classAvg: 115.0, classRank: 18, fullMark: 150 },
-        { subject: "物理", score: 92, classAvg: 78.3, classRank: 8, fullMark: 100 },
-        { subject: "化学", score: 88, classAvg: 79.6, classRank: 14, fullMark: 100 },
-        { subject: "生物", score: 94, classAvg: 81.4, classRank: 9, fullMark: 100 }
-    ];
+    // 个人成绩
+    let personalScores = null;
+    _response = await fetch('/student/grade',{method: 'get'});
+    personalScores = await _response.json();
 
+    // 总分、平均分班级排名
+    let personalTotal = null;
+    _response = await fetch('/student/totalrank',{method: 'get'});
+    personalTotal = await _response.json();
+    
     // 班级统计数据（按科目维度）
     const classStatBySubject = {
         "语文": { avg: 118.5, max: 138, min: 82, passCount: 42, totalStu: 48, passRate: "87.5%" },
@@ -94,21 +85,14 @@
         badges.forEach(b => b.textContent = `${unread}条未读`);
     }
 
-    // 获取个人总分/平均分
-    function getPersonalSummary() {
-        const total = personalScores.reduce((sum, s) => sum + s.score, 0);
-        const avg = (total / personalScores.length).toFixed(1);
-        return { total, avg };
-    }
-
     // 渲染顶部信息
     function renderHeaderInfo()
     {
-        document.querySelector('.user-info .user-avatar').outerHTML = '';
+        document.querySelector('.user-info .user-avatar').innerText = `${currentStudent.name.slice(0,1)}`;
+        document.querySelector('.user-info span').innerText = `${currentStudent.name}`;
     }
     // ---------- 渲染首页模块 ----------
     function renderHomeModule() {
-        const { total, avg } = getPersonalSummary();
         const unreadCount = getUnreadCount();
         // 取前3条通知（已排序，未读优先）
         const sortedNotices = getFilteredSortedNotices();
@@ -122,9 +106,9 @@
                 <p style="color:var(--gray); margin-top: 8px;">${currentStudent.name}同学，欢迎回来！班级整体学风良好，继续加油。</p>
             </div>
             <div class="summary-flex">
-                <div class="summary-card"><div class="summary-number">${total}</div><div>总分</div></div>
-                <div class="summary-card"><div class="summary-number">${avg}</div><div>平均分</div></div>
-                <div class="summary-card"><div class="summary-number">12</div><div>班级排名</div></div>
+                <div class="summary-card"><div class="summary-number">${personalTotal.total}</div><div>总分</div></div>
+                <div class="summary-card"><div class="summary-number">${parseInt(personalTotal.totalAvg).toFixed(1)}</div><div>平均分</div></div>
+                <div class="summary-card"><div class="summary-number">${personalTotal.totalRank}</div><div>班级排名</div></div>
             </div>
             <div style="margin-top: 24px;">
                 <h4>近期成绩亮点</h4>
@@ -338,6 +322,7 @@
 
     // 初始化导航事件与默认页
     function initNavigation() {
+        renderHeaderInfo();
         const navLinks = document.querySelectorAll('.sidebar-menu a');
         navLinks.forEach(link => {
             link.addEventListener('click', (e) => {
