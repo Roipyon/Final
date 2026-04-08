@@ -48,7 +48,7 @@ chooseBtn.forEach((e)=>{
     });
 });
 
-async function postInfo(ele1,ele2,identity)
+async function postInfo(ele1,ele2)
 {
     const account = ele1.value.trim();
     const password = ele2.value.trim();
@@ -58,9 +58,9 @@ async function postInfo(ele1,ele2,identity)
         body: JSON.stringify({
             account: account,
             password: password,
-            identity: identity
         })
     });
+    console.log(response)
     if (response.redirected) 
     {
         window.location.href = response.url;
@@ -79,18 +79,18 @@ loginBtn.addEventListener('click',()=>{
     {
         const stuAccount = document.querySelector('#stuAccount');
         const stuPassWord = document.querySelector('#stuPassWord');
-        postInfo(stuAccount,stuPassWord,'student');
+        postInfo(stuAccount,stuPassWord);
     }
     else if (chosen.id === 'tea')
     {
         const teaAccount = document.querySelector('#teaAccount');
         const teaPassWord = document.querySelector('#teaPassWord');
-        postInfo(teaAccount,teaPassWord,'teacher');
+        postInfo(teaAccount,teaPassWord);
     }
     else if (chosen.id === 'adm')
     {
         const admAccount = document.querySelector('#admAccount');
         const admPassWord = document.querySelector('#admPassWord');
-        postInfo(admAccount,admPassWord,'admin');
+        postInfo(admAccount,admPassWord);
     }
 });

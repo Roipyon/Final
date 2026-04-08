@@ -23,26 +23,17 @@ const pool = mysql.createPool(poolConfig);
 
 function isStudent(req,res,next)
 {
-    if (req.session.identity === 'student')
-    {
-        return next();
-    }
+    if (req.session.identity === 'student') return next();
     res.redirect('/');
 }
 function isTeacher(req,res,next)
 {
-    if (req.session.identity === 'teacher')
-    {
-        return next();
-    }
+    if (req.session.identity === 'teacher') return next();
     res.redirect('/');
 }
 function isAdmin(req,res,next)
 {
-    if (req.session.identity === 'admin')
-    {
-        return next();
-    }
+    if (req.session.identity === 'admin') return next();
     res.redirect('/');
 }
 
@@ -55,10 +46,11 @@ app.use(session({
 }))
 
 app.use('/student', isStudent, express.static('student'));
+app.use('/teacher', isTeacher, express.static('teacher'));
 app.use('/', express.static('login'));
 
 app.post('/',async(req,res)=>{
-    const { account,password,identity } = req.body;
+    const { account,password } = req.body;
     if (account.length === 0)
     {
         res.json({success: false,message: '账号不能为空！'});
@@ -75,18 +67,18 @@ app.post('/',async(req,res)=>{
         return;
     }
     try {
-        const [rows] = await pool.query('select account,password from users where identity=? and account=?',[identity,account]);
+        const [rows] = await pool.query('select account,password,identity from users where account=?',[account]);
         if (!rows || rows.length === 0) {
             res.json({success: false, message: '用户不存在！'});
             return;
         }
         if (password === rows[0].password)
         {
-            req.session.identity = identity;
+            req.session.identity = rows[0].identity;
             req.session.account = account;
-            if (identity === 'student') res.redirect('/student');
-            else if (identity === 'teacher') res.redirect('/teacher');
-            else if (identity === 'admin') res.redirect('/admin');
+            if (req.session.identity === 'student') res.redirect('/student');
+            else if (req.session.identity === 'teacher') res.redirect('/teacher');
+            else if (req.session.identity === 'admin') res.redirect('/admin');
         }
         else 
         {
@@ -102,11 +94,14 @@ app.post('/',async(req,res)=>{
 app.get('/student',isStudent,(req,res)=>{
     res.sendFile(path.join(__dirname, 'student', 'stu.html'));
 });
+app.get('/teacher',isTeacher,(req,res)=>{
+    res.sendFile(path.join(__dirname, 'teacher', 'tea.html'));
+});
 
 // 获取当前学生用户信息
 app.get('/student/info',isStudent,async(req,res)=>{
     const account = req.session.account;
-    const [rows] = await pool.query('select id,account,identity,real_name from users where account = ?',[account]);
+    const [rows] = await pool.query('select id,real_name from users where account = ?',[account]);
     const userId = rows[0].id;
     const realName = rows[0].real_name;
     const [_rows] = await pool.query('select class_id from class_members where student_id = ?',[userId]);
@@ -277,6 +272,21 @@ app.post('/student/notices',isStudent,async(req,res)=>{
     const [update] = await pool.query('insert into notice_read_status (notice_id,student_id,is_read,read_time) values (?,?,?,now())',[notice_id,userId,is_read]);
     if (update[0].affectedRows === 1) res.json({success: true,message: '确认已读'});
     else res.json({success: false,message: '已读失败'});
+});
+
+// 教师端
+
+// 获取当前用户信息
+app.get('/teacher/info',isTeacher,async(req,res)=>{
+    const account = req.session.account;
+    const [rows] = await pool.query('select id,real_name from users where account = ?',[account]);
+    const userId = rows[0].id;
+    const realName = rows[0].real_name;
+    const [class_info] = await pool.query('select id,class_name from classes where teacher_id = ?',[userId]);
+    res.json({
+        name: realName,
+        className: class_info[0].class_name,
+    });
 });
 
 app.get('/logout',async(req,res)=>{
