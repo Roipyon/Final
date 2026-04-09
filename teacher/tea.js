@@ -19,14 +19,6 @@
     let subjectGeneral = null;
     response = await fetch('/teacher/subjectgeneral',{method: 'get'});
     subjectGeneral = await response.json();
-    // let scoresData = [
-    //     { id: 1, studentName: "李明", id: "2023001", subject: "数学", score: 92, classAvg: 85.2, class_subject_rank: 5 },
-    //     { id: 2, studentName: "王芳", id: "2023002", subject: "数学", score: 88, classAvg: 85.2, class_subject_rank: 10 },
-    //     { id: 3, studentName: "张强", id: "2023003", subject: "数学", score: 76, classAvg: 85.2, class_subject_rank: 22 },
-    //     { id: 4, studentName: "李明", id: "2023001", subject: "英语", score: 85, classAvg: 82.5, class_subject_rank: 8 },
-    //     { id: 5, studentName: "王芳", id: "2023002", subject: "英语", score: 91, classAvg: 82.5, class_subject_rank: 3 },
-    //     { id: 6, studentName: "张强", id: "2023003", subject: "英语", score: 74, classAvg: 82.5, class_subject_rank: 25 }
-    // ];
     // 班级通知列表 (含已读统计)
     let notices = [
         { id: 101, title: "期中考试动员会", content: "下周三下午召开期中动员大会，请同学们准时参加。", publishTime: "2025-04-05 10:00", teacher_name: "王敏", isReadByStudents: 28, totalStu: 42, unreadCount: 14 },
@@ -41,6 +33,7 @@
     ];
     let currentSubjectFilter = "总分";
     let currentPageLog = 1;
+    let currentEditId = null;
     const logsPerPage = 5;
 
     function getFilteredScores() {
@@ -55,9 +48,13 @@
     }
 
     // 首页
-    function renderHome() {
+    async function renderHome() {
         const unreadNoticesCount = notices.filter(n => n.unreadCount > 0).length;
         const recentNotices = [...notices].sort((a,b)=>new Date(b.publishTime)-new Date(a.publishTime)).slice(0,3);
+        // 总分概况
+        let general = null;
+        response = await fetch('/teacher/general',{method: 'get'});
+        general = await response.json();
         const html = `
             <h3>班级工作台 · ${currentTeacher.className}</h3>
             <p style="margin:8px 0 20px;">欢迎${currentTeacher.name}老师，本周班级整体表现良好，请及时处理未读通知反馈。</p>
@@ -78,9 +75,25 @@
         });
     }
 
-    function renderScoreModule() {
+    async function refreshAllData() {
+        // 单科概况
+        response = await fetch('/teacher/subjectgeneral',{method: 'get'});
+        subjectGeneral = await response.json();
+        // 总分概况
+        response = await fetch('/teacher/general',{method: 'get'});
+        general = await response.json();
+        // 成绩数据 (本班)
+        response = await fetch('/teacher/scores',{method: 'get'});
+        scoresData = await response.json();
+        // 本班每人总分
+        response = await fetch('/teacher/totalscores',{method: 'get'});
+        scoresTotal = await response.json();
+    }
+
+    async function renderScoreModule() {
         let tableRows = null;
         let stats = null;
+        await refreshAllData();
         if (currentSubjectFilter === '总分') {
             stats = {
                 avg: general.avg,
@@ -90,8 +103,7 @@
             tableRows = scoresTotal.map(s => `
                 <tr>
                     <td>${s.studentName}</td><td>${s.id}</td><td>${s.total_score}</td><td>${s.class_rank}</td>
-                    <td><button class="btn-sm edit-score" data-id="${s.id}" data-score="${s.total_score}" data-stuid="${s.id}">编辑</button>
-                    <button class="btn-sm btn-danger del-score" data-id="${s.id}" style="margin-left:6px;">删除</button></td>
+                    <td></td>
                 </tr>
             `).join('');
         }
@@ -105,7 +117,6 @@
                 <tr>
                     <td>${s.studentName}</td><td>${s.id}</td><td>${s.score}</td><td>${s.class_subject_rank}</td>
                     <td><button class="btn-sm edit-score" data-id="${s.id}" data-subject="${s.subject}" data-score="${s.score}" data-stuid="${s.id}">编辑</button>
-                    <button class="btn-sm btn-danger del-score" data-id="${s.id}" style="margin-left:6px;">删除</button></td>
                 </tr>
             `).join('');
         }
@@ -116,8 +127,6 @@
                     <option value="总分" ${currentSubjectFilter==='总分'?'selected':''}>总分</option>
                     ${subjectGeneral.map(e => `<option value="${e.subject}" ${currentSubjectFilter===e.subject?'selected':''}>${e.subject}</option>`).join('')}
                 </select>
-            <button id="addScoreBtn" class="btn-primary btn-sm">+ 单条添加</button>
-            <button id="batchImportBtn" class="btn-sm">批量导入(模拟)</button>
             </div></div>
             <div class="stats-grid" style="margin-bottom:20px;">
                 <div class="stat-card"><div class="stat-value">${stats.avg}</div><div>平均分</div></div>
@@ -138,35 +147,85 @@
         `;
         document.getElementById('scoreSection').innerHTML = html;
         document.getElementById('subjectSelect')?.addEventListener('change', (e) => { currentSubjectFilter = e.target.value; renderScoreModule(); });
-        document.getElementById('addScoreBtn')?.addEventListener('click', () => showAddScoreModal());
-        document.getElementById('batchImportBtn')?.addEventListener('click', () => alert("演示模式：批量导入成绩功能"));
         document.getElementById('exportScoreBtn')?.addEventListener('click', () => exportScoresToCSV());
+        // 编辑成绩事件
         document.querySelectorAll('.edit-score').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const id = parseInt(btn.dataset.id);
-                const oldScore = btn.dataset.score;
-                const newScore = prompt("请输入新成绩", oldScore);
-                if(newScore && !isNaN(newScore)) {
-                    const idx = scoresData.findIndex(s => s.id === id);
-                    if(idx !== -1) { scoresData[idx].score = parseInt(newScore); alert("成绩已更新"); renderScoreModule(); renderHome(); }
+                const scoreItem = scoresData.find(s => (s.id === id && s.subject === currentSubjectFilter));
+                if (scoreItem) {
+                    currentEditId = id;
+                    document.getElementById('editStudentName').value = scoreItem.studentName;
+                    document.getElementById('editSubject').value = scoreItem.subject;
+                    document.getElementById('editScore').value = scoreItem.score;
+                    document.getElementById('editScoreModal').style.display = 'flex';
                 }
             });
         });
-        document.querySelectorAll('.del-score').forEach(btn => {
-            btn.addEventListener('click', () => { if(confirm("删除该条成绩？")){ const id = parseInt(btn.dataset.id); scoresData = scoresData.filter(s => s.id !== id); renderScoreModule(); renderHome(); alert("已删除"); } });
-        });
     }
-    function showAddScoreModal() {
-        const name = prompt("学生姓名");
-        const subject = currentSubjectFilter;
-        const score = prompt("成绩分数");
-        if(name && score && !isNaN(score)) {
-            const newId = Date.now();
-            scoresData.push({ id: newId, studentName: name, id: "new"+newId, subject: subject, score: parseInt(score), class_subject_rank: Math.floor(Math.random()*30+1) });
-            renderScoreModule(); renderHome();
-            alert("添加成功");
+
+    // 编辑模态框
+    function closeEditModal() {
+        document.getElementById('editScoreModal').style.display = 'none';
+        currentEditId = null;
+    }
+
+    // 确定修改
+    async function confirmEditScore() {
+        const newScore = parseFloat(document.getElementById('editScore').value).toFixed(1);
+        const scoreItem = scoresData.find(s => (s.id === currentEditId && s.subject === currentSubjectFilter));
+        if (!scoreItem) {
+            alert('成绩记录不存在');
+            closeEditModal();
+            return;
+        }
+        const subject = scoreItem.subject; 
+        let response = null;
+        response = await fetch('/teacher/fullmark',{
+            method: 'post',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                subject: subject
+            })
+        });
+        const fullMark = parseInt((await response.json()).full_mark);
+        if (isNaN(newScore) || newScore < 0 || newScore > fullMark) {
+            alert('请输入有效的成绩!');
+            return;
+        }
+        response = await fetch('/teacher/scores', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                studentId: currentEditId,
+                subject: subject,
+                newScore: newScore
+            })
+        });
+        const result = await response.json();
+        if (result.success) {
+            alert('成绩修改成功');
+            // 更新本地数据
+            scoreItem.score = parseFloat(newScore);
+            // 刷新页面显示
+            renderScoreModule();
+            renderHome();
+            closeEditModal();
+        } else {
+            alert(result.message || '修改失败，请重试');
         }
     }
+
+    function bindEditModalEvents() {
+        const modal = document.getElementById('editScoreModal');
+        if (!modal) return;
+        document.getElementById('editModalCancelBtn')?.addEventListener('click', closeEditModal);
+        document.getElementById('editModalConfirmBtn')?.addEventListener('click', confirmEditScore);
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) closeEditModal();
+        });
+    }
+
     function exportScoresToCSV() {
         const filtered = getFilteredScores();
         let csv = "姓名,学号,成绩,班级排名\n" + filtered.map(s => `${s.studentName},${s.id},${s.score},${s.class_subject_rank}`).join("\n");
@@ -215,7 +274,8 @@
             if(title && content) {
                 const newNotice = { id: Date.now(), title, content, publishTime: new Date().toLocaleString(), teacher_name: "王敏", isReadByStudents: 0, totalStu: 42, unreadCount: 42 };
                 notices.unshift(newNotice);
-                renderNoticeModule(); renderHome();
+                renderNoticeModule(); 
+                renderHome();
                 alert("通知已发布");
             } else alert("请填写完整");
         });
@@ -277,6 +337,7 @@
         });
         document.getElementById('logoutBtn')?.addEventListener('click', ()=> alert("退出登录(演示)"));
         switchToSection('home');
+        bindEditModalEvents();
     }
     init();
 })();

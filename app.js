@@ -293,7 +293,7 @@ app.get('/teacher/info',isTeacher,async(req,res)=>{
 // 获取所有学生单科成绩
 app.get('/teacher/scores',isTeacher,async(req,res)=>{
     const account = req.session.account;
-    const [rows] = await pool.query('select id,real_name from users where account = ?',[account]);
+    const [rows] = await pool.query('select id from users where account = ?',[account]);
     const userId = rows[0].id;
     const [scores] = await pool.query(`
         with get_class_id as (
@@ -306,7 +306,8 @@ app.get('/teacher/scores',isTeacher,async(req,res)=>{
             s.student_id as id,
             u.real_name as studentName,
             s.subject,
-            s.score 
+            s.score,
+            s.exam_date
         from scores s, get_class_id gci, users u
         where u.id = s.student_id and gci.id = s.class_id
         )
@@ -315,6 +316,7 @@ app.get('/teacher/scores',isTeacher,async(req,res)=>{
             studentName,
             subject,
             score,
+            exam_date,
             rank() over (partition by subject order by score desc) as class_subject_rank
         from stu_scores ss
         `,[userId]);
@@ -324,7 +326,7 @@ app.get('/teacher/scores',isTeacher,async(req,res)=>{
 // 获取班级分数概况
 app.get('/teacher/general',isTeacher,async(req,res)=>{
     const account = req.session.account;
-    const [rows] = await pool.query('select id,real_name from users where account = ?',[account]);
+    const [rows] = await pool.query('select id from users where account = ?',[account]);
     const userId = rows[0].id;
     const [scores] = await pool.query(`
         with get_class_id as (
@@ -363,7 +365,7 @@ app.get('/teacher/general',isTeacher,async(req,res)=>{
 // 获取所有学生总分
 app.get('/teacher/totalscores',isTeacher,async(req,res)=>{
     const account = req.session.account;
-    const [rows] = await pool.query('select id,real_name from users where account = ?',[account]);
+    const [rows] = await pool.query('select id from users where account = ?',[account]);
     const userId = rows[0].id;
     const [scores] = await pool.query(`
         with get_class_id as (
@@ -394,7 +396,7 @@ app.get('/teacher/totalscores',isTeacher,async(req,res)=>{
 // 获取单科成绩概况
 app.get('/teacher/subjectgeneral',isTeacher,async(req,res)=>{
     const account = req.session.account;
-    const [rows] = await pool.query('select id,real_name from users where account = ?',[account]);
+    const [rows] = await pool.query('select id from users where account = ?',[account]);
     const userId = rows[0].id;
     const [scores] = await pool.query(`
         with get_class_id as (
@@ -425,6 +427,30 @@ app.get('/teacher/subjectgeneral',isTeacher,async(req,res)=>{
         from score_avg
     `,[userId]);
     res.json(scores);
+});
+
+// 获取单科满分
+app.post('/teacher/fullmark',isTeacher,async(req,res)=>{
+    const subject = req.body.subject;
+    const [rows] = await pool.query('select full_mark from scores where subject = ?',[subject]);
+    res.json(rows[0]);
+});
+
+// 更新成绩
+app.post('/teacher/scores',isTeacher,async(req,res)=>{
+    const { studentId, subject, newScore } = req.body;
+    const account = req.session.account;
+    const [rows] = await pool.query('select id from users where account = ?',[account]);
+    const userId = rows[0].id;
+    const [cid] = await pool.query('SELECT id FROM classes WHERE teacher_id = ?', [userId]);
+    classId = cid[0].id;
+    if (!classId) return res.json({ success: false,message: '无权限' });
+    const [stu] = await pool.query('SELECT 1 FROM class_members WHERE student_id = ? AND class_id = ?', [studentId, classId]);
+    const student = stu[0];
+    if (!student) return res.json({ success: false,message: '不能修改非本班学生成绩' });
+    const [response] = await pool.query('UPDATE scores SET score = ? WHERE student_id = ? AND subject = ?', [newScore, studentId, subject]);
+    if (response.affectedRows === 1) res.json({ success: true,message: '修改成功'});
+    else res.json({ success: false,message: '修改失败'});
 });
 
 app.get('/logout',async(req,res)=>{

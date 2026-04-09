@@ -35,6 +35,28 @@
             <div class="card section" id="noticeSection"></div>
             <div class="card section" id="logSection"></div>
         </main>
+        <!-- 编辑成绩模态框 -->
+        <div id="editScoreModal" class="modal-mask" style="display:none;">
+            <div class="modal-container">
+                <h3 style="margin-bottom: 16px;">修改成绩</h3>
+                <div class="form-group">
+                    <label>学生姓名</label>
+                    <input type="text" id="editStudentName" readonly style="background:#f5f7fa;">
+                </div>
+                <div class="form-group">
+                    <label>科目</label>
+                    <input type="text" id="editSubject" readonly style="background:#f5f7fa;">
+                </div>
+                <div class="form-group">
+                    <label>新成绩</label>
+                    <input type="number" id="editScore" placeholder="0-100" step="1">
+                </div>
+                <div class="flex-btns">
+                    <button id="editModalCancelBtn" class="btn-default">取消</button>
+                    <button id="editModalConfirmBtn" class="btn-primary">确认修改</button>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 <script src="tea.js"></script>
