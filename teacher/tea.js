@@ -335,7 +335,12 @@
         document.querySelectorAll('.sidebar-menu a').forEach(link => {
             link.addEventListener('click', (e) => { switchToSection(link.getAttribute('data-nav')); });
         });
-        document.getElementById('logoutBtn')?.addEventListener('click', ()=> alert("退出登录(演示)"));
+        const logoutBtn = document.getElementById('logoutBtn');
+        if (logoutBtn) {
+            logoutBtn.addEventListener('click', () => {
+                window.location.href = '/logout';
+            });
+        }
         switchToSection('home');
         bindEditModalEvents();
     }
