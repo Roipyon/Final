@@ -360,6 +360,73 @@ app.get('/teacher/general',isTeacher,async(req,res)=>{
     res.json(scores[0]);
 });
 
+// 获取所有学生总分
+app.get('/teacher/totalscores',isTeacher,async(req,res)=>{
+    const account = req.session.account;
+    const [rows] = await pool.query('select id,real_name from users where account = ?',[account]);
+    const userId = rows[0].id;
+    const [scores] = await pool.query(`
+        with get_class_id as (
+            select 
+                id
+            from classes where teacher_id = ?
+        ),
+        stu_scores as (
+            select
+            s.student_id as id,
+            u.real_name as studentName,
+            sum(s.score) as total_score 
+        from scores s, get_class_id gci, users u
+        where u.id = s.student_id and gci.id = s.class_id
+        group by s.student_id
+        )
+        select 
+            id,
+            studentName,
+            total_score,
+            rank() over (order by total_score desc) as class_rank
+        from stu_scores
+    `,[userId]);
+    res.json(scores);
+});
+
+
+// 获取单科成绩概况
+app.get('/teacher/subjectgeneral',isTeacher,async(req,res)=>{
+    const account = req.session.account;
+    const [rows] = await pool.query('select id,real_name from users where account = ?',[account]);
+    const userId = rows[0].id;
+    const [scores] = await pool.query(`
+        with get_class_id as (
+            select 
+                id
+            from classes where teacher_id = ?
+        ),
+        score_avg as (
+            select
+                s.subject,
+                round(avg(s.score),1) as avg,
+                max(s.score) as max,
+                min(s.score) as min,
+                count(*) as total_count,
+                count(case when s.score >= s.full_mark*0.6 then 1 end) as pass_count
+            from scores s,get_class_id gci
+            where s.class_id = gci.id
+            group by s.subject
+        )
+        select 
+            subject,
+            max,
+            min,
+            avg,
+            pass_count as passCount,
+            total_count as totalStu,
+            concat(round(pass_count*100 / total_count, 2),'%') as passRate
+        from score_avg
+    `,[userId]);
+    res.json(scores);
+});
+
 app.get('/logout',async(req,res)=>{
     req.session.destroy((err)=>{
         if (err) res.status.send('注销失败！');

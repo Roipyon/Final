@@ -4,22 +4,29 @@
     let response = await fetch('/teacher/info',{method: 'get'});
     currentTeacher = await response.json();
     // 成绩数据 (本班)
-    let _scoresData = null;
+    let scoresData = null;
     response = await fetch('/teacher/scores',{method: 'get'});
-    _scoresData = await response.json();
+    scoresData = await response.json();
+    // 本班每人总分
+    let scoresTotal = null;
+    response = await fetch('/teacher/totalscores',{method: 'get'});
+    scoresTotal = await response.json();
     // 总分概况
     let general = null;
     response = await fetch('/teacher/general',{method: 'get'});
     general = await response.json();
-
-    let scoresData = [
-        { id: 1, studentName: "李明", studentId: "2023001", subject: "数学", score: 92, classAvg: 85.2, classRank: 5 },
-        { id: 2, studentName: "王芳", studentId: "2023002", subject: "数学", score: 88, classAvg: 85.2, classRank: 10 },
-        { id: 3, studentName: "张强", studentId: "2023003", subject: "数学", score: 76, classAvg: 85.2, classRank: 22 },
-        { id: 4, studentName: "李明", studentId: "2023001", subject: "英语", score: 85, classAvg: 82.5, classRank: 8 },
-        { id: 5, studentName: "王芳", studentId: "2023002", subject: "英语", score: 91, classAvg: 82.5, classRank: 3 },
-        { id: 6, studentName: "张强", studentId: "2023003", subject: "英语", score: 74, classAvg: 82.5, classRank: 25 }
-    ];
+    // 单科概况
+    let subjectGeneral = null;
+    response = await fetch('/teacher/subjectgeneral',{method: 'get'});
+    subjectGeneral = await response.json();
+    // let scoresData = [
+    //     { id: 1, studentName: "李明", id: "2023001", subject: "数学", score: 92, classAvg: 85.2, class_subject_rank: 5 },
+    //     { id: 2, studentName: "王芳", id: "2023002", subject: "数学", score: 88, classAvg: 85.2, class_subject_rank: 10 },
+    //     { id: 3, studentName: "张强", id: "2023003", subject: "数学", score: 76, classAvg: 85.2, class_subject_rank: 22 },
+    //     { id: 4, studentName: "李明", id: "2023001", subject: "英语", score: 85, classAvg: 82.5, class_subject_rank: 8 },
+    //     { id: 5, studentName: "王芳", id: "2023002", subject: "英语", score: 91, classAvg: 82.5, class_subject_rank: 3 },
+    //     { id: 6, studentName: "张强", id: "2023003", subject: "英语", score: 74, classAvg: 82.5, class_subject_rank: 25 }
+    // ];
     // 班级通知列表 (含已读统计)
     let notices = [
         { id: 101, title: "期中考试动员会", content: "下周三下午召开期中动员大会，请同学们准时参加。", publishTime: "2025-04-05 10:00", teacher_name: "王敏", isReadByStudents: 28, totalStu: 42, unreadCount: 14 },
@@ -32,24 +39,12 @@
         { operator: "王敏", actionType: "通知发布", content: "发布通知:期中考试动员会", operateTime: "2025-04-05 10:02" },
         { operator: "王敏", actionType: "成绩录入", content: "批量导入英语成绩", operateTime: "2025-04-01 14:30" }
     ];
-    let currentSubjectFilter = "数学";
+    let currentSubjectFilter = "总分";
     let currentPageLog = 1;
     const logsPerPage = 5;
 
     function getFilteredScores() {
         return scoresData.filter(s => s.subject === currentSubjectFilter);
-    }
-    function getSubjectStats(subject) {
-        const subScores = scoresData.filter(s => s.subject === subject);
-        if(subScores.length === 0) return { avg:0, max:0, min:0, passCount:0, total:0, passRate:"0%" };
-        const scores = subScores.map(s => s.score);
-        const avg = (scores.reduce((a,b)=>a+b,0)/scores.length).toFixed(1);
-        const max = Math.max(...scores);
-        const min = Math.min(...scores);
-        const passCount = scores.filter(s => s >= 60).length;
-        const total = scores.length;
-        const passRate = ((passCount/total)*100).toFixed(1)+"%";
-        return { avg, max, min, passCount, total, passRate };
     }
 
     // 渲染顶部信息
@@ -84,18 +79,43 @@
     }
 
     function renderScoreModule() {
-        const filtered = getFilteredScores();
-        const stats = getSubjectStats(currentSubjectFilter);
-        const tableRows = filtered.map(s => `
-            <tr>
-                <td>${s.studentName}</td><td>${s.studentId}</td><td>${s.score}</td><td>${s.classRank}</td>
-                <td><button class="btn-sm edit-score" data-id="${s.id}" data-subject="${s.subject}" data-score="${s.score}" data-stuid="${s.studentId}">编辑</button>
-                <button class="btn-sm btn-danger del-score" data-id="${s.id}" style="margin-left:6px;">删除</button></td>
-            </tr>
-        `).join('');
+        let tableRows = null;
+        let stats = null;
+        if (currentSubjectFilter === '总分') {
+            stats = {
+                avg: general.avg,
+                max: general.max,
+                min: general.min
+            };
+            tableRows = scoresTotal.map(s => `
+                <tr>
+                    <td>${s.studentName}</td><td>${s.id}</td><td>${s.total_score}</td><td>${s.class_rank}</td>
+                    <td><button class="btn-sm edit-score" data-id="${s.id}" data-score="${s.total_score}" data-stuid="${s.id}">编辑</button>
+                    <button class="btn-sm btn-danger del-score" data-id="${s.id}" style="margin-left:6px;">删除</button></td>
+                </tr>
+            `).join('');
+        }
+        else {
+            const filtered = getFilteredScores(); // 拿到当前学科的所有成绩
+            subjectGeneral.forEach(e=>{
+                if (e.subject === currentSubjectFilter)
+                {stats = e;return;}
+            });
+            tableRows = filtered.map(s => `
+                <tr>
+                    <td>${s.studentName}</td><td>${s.id}</td><td>${s.score}</td><td>${s.class_subject_rank}</td>
+                    <td><button class="btn-sm edit-score" data-id="${s.id}" data-subject="${s.subject}" data-score="${s.score}" data-stuid="${s.id}">编辑</button>
+                    <button class="btn-sm btn-danger del-score" data-id="${s.id}" style="margin-left:6px;">删除</button></td>
+                </tr>
+            `).join('');
+        }
         const html = `
             <div style="display:flex; justify-content:space-between; align-items:center;"><h3>成绩管理 · ${currentSubjectFilter}</h3>
-            <div class="filter-bar"><select id="subjectSelect" class="filter-select"><option value="数学" ${currentSubjectFilter==='数学'?'selected':''}>数学</option><option value="英语" ${currentSubjectFilter==='英语'?'selected':''}>英语</option></select>
+            <div class="filter-bar">
+                <select id="subjectSelect" class="filter-select">
+                    <option value="总分" ${currentSubjectFilter==='总分'?'selected':''}>总分</option>
+                    ${subjectGeneral.map(e => `<option value="${e.subject}" ${currentSubjectFilter===e.subject?'selected':''}>${e.subject}</option>`).join('')}
+                </select>
             <button id="addScoreBtn" class="btn-primary btn-sm">+ 单条添加</button>
             <button id="batchImportBtn" class="btn-sm">批量导入(模拟)</button>
             </div></div>
@@ -103,10 +123,17 @@
                 <div class="stat-card"><div class="stat-value">${stats.avg}</div><div>平均分</div></div>
                 <div class="stat-card"><div class="stat-value">${stats.max}</div><div>最高分</div></div>
                 <div class="stat-card"><div class="stat-value">${stats.min}</div><div>最低分</div></div>
-                <div class="stat-card"><div class="stat-value">${stats.passCount}/${stats.total}</div><div>及格人数</div></div>
-                <div class="stat-card"><div class="stat-value">${stats.passRate}</div><div>及格率</div></div>
+                ${currentSubjectFilter === '总分'?'':`<div class="stat-card"><div class="stat-value">${stats.passCount}/${stats.totalStu}</div><div>及格人数</div></div>
+                <div class="stat-card"><div class="stat-value">${stats.passRate}</div><div>及格率</div></div>`}
             </div>
-            <table class="table"><thead><tr><th>姓名</th><th>学号</th><th>成绩</th><th>班级排名</th><th>操作</th></tr></thead><tbody>${tableRows || '<tr><td colspan="5">暂无数据</td></tr>'}</tbody></table>
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>姓名</th><th>学号</th><th>成绩</th><th>班级排名</th><th>操作</th>
+                    </tr>
+                </thead>
+                    <tbody>${tableRows || '<tr><td colspan="5">暂无数据</td></tr>'}</tbody>
+            </table>
             <div class="filter-bar" style="margin-top:16px;"><button id="exportScoreBtn" class="btn-sm">导出当前科目成绩(CSV)</button></div>
         `;
         document.getElementById('scoreSection').innerHTML = html;
@@ -135,14 +162,14 @@
         const score = prompt("成绩分数");
         if(name && score && !isNaN(score)) {
             const newId = Date.now();
-            scoresData.push({ id: newId, studentName: name, studentId: "new"+newId, subject: subject, score: parseInt(score), classRank: Math.floor(Math.random()*30+1) });
+            scoresData.push({ id: newId, studentName: name, id: "new"+newId, subject: subject, score: parseInt(score), class_subject_rank: Math.floor(Math.random()*30+1) });
             renderScoreModule(); renderHome();
             alert("添加成功");
         }
     }
     function exportScoresToCSV() {
         const filtered = getFilteredScores();
-        let csv = "姓名,学号,成绩,班级排名\n" + filtered.map(s => `${s.studentName},${s.studentId},${s.score},${s.classRank}`).join("\n");
+        let csv = "姓名,学号,成绩,班级排名\n" + filtered.map(s => `${s.studentName},${s.id},${s.score},${s.class_subject_rank}`).join("\n");
         const blob = new Blob(["\uFEFF" + csv], {type: "text/csv;charset=utf-8;"});
         const link = document.createElement("a");
         link.href = URL.createObjectURL(blob); link.download = `${currentTeacher.className}_${currentSubjectFilter}_成绩.csv`; link.click();
