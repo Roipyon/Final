@@ -266,6 +266,7 @@ app.post('/student/notices',isStudent,async(req,res)=>{
     const response = req.body;
     const notice_id = response.notice_id;
     const is_read = response.is_read;
+    if (is_read != 1) res.json({success: false,message: '状态码无效'});
     const account = req.session.account;
     const [rows] = await pool.query('select id from users where account = ?',[account]);
     const userId = rows[0].id;
@@ -287,6 +288,76 @@ app.get('/teacher/info',isTeacher,async(req,res)=>{
         name: realName,
         className: class_info[0].class_name,
     });
+});
+
+// 获取所有学生单科成绩
+app.get('/teacher/scores',isTeacher,async(req,res)=>{
+    const account = req.session.account;
+    const [rows] = await pool.query('select id,real_name from users where account = ?',[account]);
+    const userId = rows[0].id;
+    const [scores] = await pool.query(`
+        with get_class_id as (
+            select 
+                id
+            from classes where teacher_id = ?
+        ),
+        stu_scores as (
+            select
+            s.student_id as id,
+            u.real_name as studentName,
+            s.subject,
+            s.score 
+        from scores s, get_class_id gci, users u
+        where u.id = s.student_id and gci.id = s.class_id
+        )
+        select 
+            id,
+            studentName,
+            subject,
+            score,
+            rank() over (partition by subject order by score desc) as class_subject_rank
+        from stu_scores ss
+        `,[userId]);
+        res.json(scores);
+});
+
+// 获取班级分数概况
+app.get('/teacher/general',isTeacher,async(req,res)=>{
+    const account = req.session.account;
+    const [rows] = await pool.query('select id,real_name from users where account = ?',[account]);
+    const userId = rows[0].id;
+    const [scores] = await pool.query(`
+        with get_class_id as (
+            select 
+                id
+            from classes where teacher_id = ?
+        ),
+        score_total as (
+            select
+                u.real_name as name,
+                sum(s.score) as total
+            from scores s, get_class_id gci,users u
+            where gci.id = s.class_id and s.student_id = u.id
+            group by s.student_id
+        ),
+        score_avg as (
+            select
+                round(avg(total),1) as avg
+            from score_total
+        ),
+        max_min as (
+            select 
+                max(st.total) as max,
+                min(st.total) as min
+            from score_total st
+        )
+        select 
+            mm.max,
+            mm.min,
+            sa.avg
+        from score_avg sa, max_min mm
+    `,[userId]);
+    res.json(scores[0]);
 });
 
 app.get('/logout',async(req,res)=>{

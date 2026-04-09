@@ -1,11 +1,17 @@
 (async ()=>{
-    // ---------- 模拟数据 (班主任视角：高二3班) ----------
-    // const currentTeacher = { name: "王敏", role: "班主任", className: "高二(3)班", classId: 3 };
     // 登录用户信息
     let currentTeacher = null;
     let response = await fetch('/teacher/info',{method: 'get'});
     currentTeacher = await response.json();
     // 成绩数据 (本班)
+    let _scoresData = null;
+    response = await fetch('/teacher/scores',{method: 'get'});
+    _scoresData = await response.json();
+    // 总分概况
+    let general = null;
+    response = await fetch('/teacher/general',{method: 'get'});
+    general = await response.json();
+
     let scoresData = [
         { id: 1, studentName: "李明", studentId: "2023001", subject: "数学", score: 92, classAvg: 85.2, classRank: 5 },
         { id: 2, studentName: "王芳", studentId: "2023002", subject: "数学", score: 88, classAvg: 85.2, classRank: 10 },
@@ -53,18 +59,17 @@
         document.querySelector('.user-info span').innerText = `${currentTeacher.name} (老师)`;
     }
 
+    // 首页
     function renderHome() {
-        const mathStat = getSubjectStats("数学");
-        const engStat = getSubjectStats("英语");
         const unreadNoticesCount = notices.filter(n => n.unreadCount > 0).length;
         const recentNotices = [...notices].sort((a,b)=>new Date(b.publishTime)-new Date(a.publishTime)).slice(0,3);
         const html = `
             <h3>班级工作台 · ${currentTeacher.className}</h3>
             <p style="margin:8px 0 20px;">欢迎${currentTeacher.name}老师，本周班级整体表现良好，请及时处理未读通知反馈。</p>
             <div class="stats-grid">
-                <div class="stat-card"><div class="stat-value">${mathStat.avg}</div><div>数学均分</div></div>
-                <div class="stat-card"><div class="stat-value">${engStat.avg}</div><div>英语均分</div></div>
-                <div class="stat-card"><div class="stat-value">${notices.length}</div><div>班级通知</div></div>
+                <div class="stat-card"><div class="stat-value">${general.max}</div><div>最高分</div></div>
+                <div class="stat-card"><div class="stat-value">${general.min}</div><div>最低分</div></div>
+                <div class="stat-card"><div class="stat-value">${general.avg}</div><div>平均分</div></div>
                 <div class="stat-card"><div class="stat-value">${unreadNoticesCount}</div><div>未完全阅读通知</div></div>
             </div>
             <div style="margin-top:24px;"><h4>最新通知</h4>
