@@ -320,7 +320,26 @@
             });
         });
         document.querySelectorAll('.view-readlist').forEach(btn => {
-            btn.addEventListener('click', (e) => { e.stopPropagation(); alert("已读名单(演示): 已读28人: 李明,王芳等；未读14人"); });
+            btn.addEventListener('click', async(e) => {
+                e.stopPropagation(); 
+                const noticeId = parseInt(btn.dataset.id);
+                // 获取已读/未读名单
+                const res = await fetch(`/teacher/notices/${noticeId}/read-status`);
+                if (res.ok) {
+                    const data = await res.json();
+                    // 填充模态框
+                    document.getElementById('readCount').innerText = data.readCount;
+                    document.getElementById('unreadCount').innerText = data.unreadCount;
+                    const readListUl = document.getElementById('readList');
+                    const unreadListUl = document.getElementById('unreadList');
+                    readListUl.innerHTML = data.readList.map(name => `<li>${name}</li>`).join('');
+                    unreadListUl.innerHTML = data.unreadList.map(name => `<li>${name}</li>`).join('');
+                    // 显示模态框
+                    document.getElementById('readStatusModal').style.display = 'flex';
+                } else {
+                    alert('获取名单失败');
+                }
+            });
         });
     }
 
@@ -408,6 +427,18 @@
         });
     }
 
+    function bindReadStatusModalEvents() {
+        const modal = document.getElementById('readStatusModal');
+        const closeBtn = document.getElementById('closeReadStatusModal');
+        if (!modal) return;
+        closeBtn?.addEventListener('click', () => {
+            modal.style.display = 'none';
+        });
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) modal.style.display = 'none';
+        });
+    }
+
     function switchToSection(section) {
         document.querySelectorAll('.sidebar-menu a').forEach(link => { link.classList.remove('active'); if(link.getAttribute('data-nav')===section) link.classList.add('active'); });
         document.querySelectorAll('.section').forEach(sec => sec.classList.remove('active'));
@@ -437,6 +468,7 @@
         switchToSection('home');
         bindEditModalEvents();
         bindEditNoticeModalEvents();
+        bindReadStatusModalEvents();
     }
     init();
 })();

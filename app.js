@@ -3,6 +3,7 @@ const express = require('express');
 const path = require('path');
 const mysql = require('mysql2/promise');
 const session = require('express-session');
+const { nextTick } = require('process');
 const app = express();
 const PORT = 5000;
 const HOST = '0.0.0.0';
@@ -451,6 +452,10 @@ app.post('/teacher/fullmark',isTeacher,async(req,res)=>{
 // 更新成绩
 app.post('/teacher/scores',isTeacher,async(req,res)=>{
     const { studentId, subject, newScore } = req.body;
+    // 拿学生名
+    const [stu_name] = await pool.query('select real_name from users where id = ?',[studentId]);
+    const studentName = stu_name[0].real_name;
+    // 默认
     const account = req.session.account;
     const [rows] = await pool.query('select id,real_name,identity from users where account = ?',[account]);
     // 教师信息
@@ -530,7 +535,7 @@ app.get('/teacher/notices',isTeacher,async(req,res)=>{
 // 新增通知
 app.post('/teacher/notices',isTeacher,async(req,res)=>{
     const account = req.session.account;
-    const [rows] = await pool.query('select id,identity from users where account = ?',[account]);
+    const [rows] = await pool.query('select id,real_name,identity from users where account = ?',[account]);
     // 教师信息
     const {id: userId, real_name: user_name, identity} = rows[0];
     const [cid] = await pool.query('SELECT id FROM classes WHERE teacher_id = ?', [userId]);
@@ -542,6 +547,7 @@ app.post('/teacher/notices',isTeacher,async(req,res)=>{
     if (!title || !content) {
         return res.json({ success: false,message: '标题和内容不能为空' });
     }
+    const publishTime = new Date();
     const sql = `
         INSERT INTO notices (class_id, publisher_id, title, content, is_deleted)
         VALUES (?, ?, ?, ?, 0)
@@ -682,6 +688,57 @@ app.get('/teacher/logs',isTeacher,async(req,res)=>{
         total: total,
         page: page,
         pageSize: pageSize
+    });
+});
+
+// 获取当前日志的学生状态
+app.get('/teacher/notices/:id/read-status',isTeacher,async(req,res)=>{
+    const account = req.session.account;
+    const [rows] = await pool.query('select id,identity from users where account = ?',[account]);
+    const {id: userId, real_name: user_name, identity} = rows[0];
+    const [cid] = await pool.query('SELECT id FROM classes WHERE teacher_id = ?', [userId]);
+    classId = cid[0].id;
+    if (identity !== 'teacher') {
+        return res.json({ success: false,message: '无权限获取通知' });
+    }
+    // 拿通知id
+    const noticeId = parseInt(req.params.id);
+    // 检查当前班级里是否存在该通知
+    const [_rows] = await pool.query('select class_id,title from notices where id = ? and is_deleted = 0',[noticeId]);
+    if (_rows.length === 0) {
+        return res.json({ success: false, message: '通知不存在或已被删除' });
+    }
+    if (_rows[0].class_id !== classId) {
+        return res.status(403).json({ success: false, message: '您只能获取自己班级的通知' });
+    }
+
+    // 查询班级所有在读学生
+    const [students] = await pool.query(`
+        select id,real_name from users
+        where id in (select student_id from class_members where class_id = ?
+        and status = 1)
+        and identity = 'student'
+    `,[classId]);
+
+    // 获取当前通知已读学生信息
+    const [readRecords] = await pool.query(`
+        select student_id 
+        from notice_read_status 
+        where notice_id = ? and is_read = 1
+    `,[noticeId]);
+    // 集合，搜索速度快
+    // 返回一个只含 id 的数组
+    const readSet = new Set(readRecords.map(r => r.student_id));
+    // 分为两组
+    // 以 id 分割，但只保留姓名
+    const readList = students.filter(s => readSet.has(s.id)).map(s => s.real_name);
+    const unreadList = students.filter(s => !readSet.has(s.id)).map(s => s.real_name);
+    res.json({
+        readList: readList,
+        unreadList: unreadList,
+        totalStudents: students.length,
+        readCount: readList.length,
+        unreadCount: unreadList.length
     });
 });
 
