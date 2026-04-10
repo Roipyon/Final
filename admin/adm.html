@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>教学管理系统</title>
+    <link rel="stylesheet" href="adm.css">
+</head>
+<body>
+<div class="main-layout">
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-logo">
+            <h3>教务管理中心</h3>
+            <div style="font-size:12px; color:var(--gray);">主任 · 张宏</div>
+        </div>
+        <ul class="sidebar-menu">
+            <li><a href="javascript:void(0)" data-nav="dashboard" class="active">总览看板</a></li>
+            <li><a href="javascript:void(0)" data-nav="classManage">班级管理</a></li>
+            <li><a href="javascript:void(0)" data-nav="scoreAll">全量成绩</a></li>
+            <li><a href="javascript:void(0)" data-nav="noticeAll">全量通知</a></li>
+            <li><a href="javascript:void(0)" data-nav="systemLog">系统日志</a></li>
+        </ul>
+    </aside>
+    <div class="content-wrapper">
+        <header class="header">
+            <div class="menu-toggle" onclick="document.getElementById('sidebar').classList.toggle('show')">☰</div>
+            <div class="page-title" id="pageTitle">总览看板</div>
+            <div class="user-info">
+                <div class="user-avatar">张</div>
+                <span>张宏主任 (教务主任)</span>
+                <button class="btn-sm" id="logoutBtn">退出</button>
+            </div>
+        </header>
+        <main class="main-content">
+            <div class="card section active" id="dashboardSection"></div>
+            <div class="card section" id="classManageSection"></div>
+            <div class="card section" id="scoreAllSection"></div>
+            <div class="card section" id="noticeAllSection"></div>
+            <div class="card section" id="systemLogSection"></div>
+        </main>
+    </div>
+</div>
+<script src="adm.js"></script>
+</body>
+</html>

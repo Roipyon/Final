@@ -60,29 +60,30 @@ app.use(session({
 
 app.use('/student', isStudent, express.static('student'));
 app.use('/teacher', isTeacher, express.static('teacher'));
+app.use('/admin', isAdmin, express.static('admin'));
 app.use('/', express.static('login'));
 
 app.post('/',async(req,res)=>{
     const { account,password } = req.body;
     if (account.length === 0)
     {
-        res.json({success: false,message: '账号不能为空！'});
+        res.status(400).json({success: false,message: '账号不能为空！'});
         return;
     }
     if (password.length < 8)
     {
-        res.json({success: false,message: '密码位数应不小于8！'});
+        res.status(400).json({success: false,message: '密码位数应不小于8！'});
         return;
     }
     if (!judge.test(password))
     {
-        res.json({success: false,message: '密码包含非法字符！'});
+        res.status(400).json({success: false,message: '密码包含非法字符！'});
         return;
     }
     try {
         const [rows] = await pool.query('select account,password,identity from users where account=?',[account]);
         if (!rows || rows.length === 0) {
-            res.json({success: false, message: '用户不存在！'});
+            res.status(400).json({success: false, message: '用户不存在！'});
             return;
         }
         if (password === rows[0].password)
@@ -95,7 +96,7 @@ app.post('/',async(req,res)=>{
         }
         else 
         {
-            res.json({success: false,message:'密码不正确！'});
+            res.status(400).json({success: false,message:'密码不正确！'});
         }
     }
     catch (err)
@@ -109,6 +110,9 @@ app.get('/student',isStudent,(req,res)=>{
 });
 app.get('/teacher',isTeacher,(req,res)=>{
     res.sendFile(path.join(__dirname, 'teacher', 'tea.html'));
+});
+app.get('/admin',isAdmin,(req,res)=>{
+    res.sendFile(path.join(__dirname, 'admin', 'adm.html'));
 });
 
 // 获取当前学生用户信息
@@ -279,13 +283,13 @@ app.post('/student/notices',isStudent,async(req,res)=>{
     const response = req.body;
     const notice_id = response.notice_id;
     const is_read = response.is_read;
-    if (is_read != 1) res.json({success: false,message: '状态码无效'});
+    if (is_read != 1) res.status(400).json({success: false,message: '状态码无效'});
     const account = req.session.account;
     const [rows] = await pool.query('select id from users where account = ?',[account]);
     const userId = rows[0].id;
     const [update] = await pool.query('insert into notice_read_status (notice_id,student_id,is_read,read_time) values (?,?,?,now())',[notice_id,userId,is_read]);
     if (update[0].affectedRows === 1) res.json({success: true,message: '确认已读'});
-    else res.json({success: false,message: '已读失败'});
+    else res.status(500).json({success: false,message: '已读失败'});
 });
 
 // 教师端
@@ -296,10 +300,23 @@ app.get('/teacher/info',isTeacher,async(req,res)=>{
     const [rows] = await pool.query('select id,real_name from users where account = ?',[account]);
     const userId = rows[0].id;
     const realName = rows[0].real_name;
-    const [class_info] = await pool.query('select id,class_name from classes where teacher_id = ?',[userId]);
+    const [class_info] = await pool.query(`
+        SELECT c.id, CONCAT(g.grade_name, c.class_name) AS class_name
+        FROM classes c
+        JOIN grades g ON c.grade_id = g.id
+        WHERE c.teacher_id = ?
+    `,[userId]);
+    if (class_info.length === 0) {
+        return res.json({ 
+            name: realName, 
+            className: null, 
+            classId: null 
+        });
+    }
     res.json({
         name: realName,
         className: class_info[0].class_name,
+        classId: class_info[0].id
     });
 });
 
@@ -308,32 +325,30 @@ app.get('/teacher/scores',isTeacher,async(req,res)=>{
     const account = req.session.account;
     const [rows] = await pool.query('select id from users where account = ?',[account]);
     const userId = rows[0].id;
+    // 获取班主任所带班级 ID
+    const [classRows] = await pool.query('SELECT id FROM classes WHERE teacher_id = ?', [userId]);
+    if (classRows.length === 0) return res.json([]);
+    const classId = classRows[0].id;
+    // 获取本班最新考试日期（所有学生最新日期的最大值，保证同一考试批次）
+    const [dateRows] = await pool.query(`
+        SELECT MAX(exam_date) AS latest_date FROM scores WHERE class_id = ?
+    `, [classId]);
+    const latestDate = dateRows[0].latest_date;
+    if (!latestDate) return res.json([]);
     const [scores] = await pool.query(`
-        with get_class_id as (
-            select 
-                id
-            from classes where teacher_id = ?
-        ),
-        stu_scores as (
-            select
-            s.student_id as id,
-            u.real_name as studentName,
+        SELECT 
+            s.student_id AS id,
+            u.real_name AS studentName,
             s.subject,
             s.score,
-            s.exam_date
-        from scores s, get_class_id gci, users u
-        where u.id = s.student_id and gci.id = s.class_id
-        )
-        select 
-            id,
-            studentName,
-            subject,
-            score,
-            exam_date,
-            rank() over (partition by subject order by score desc) as class_subject_rank
-        from stu_scores ss
-        `,[userId]);
-        res.json(scores);
+            s.exam_date,
+            RANK() OVER (PARTITION BY s.subject ORDER BY s.score DESC) AS class_subject_rank
+        FROM scores s
+        JOIN users u ON s.student_id = u.id
+        WHERE s.class_id = ? AND s.exam_date = ?
+        ORDER BY s.subject, s.score DESC
+    `, [classId, latestDate]);
+    res.json(scores);
 });
 
 // 获取班级分数概况
@@ -380,20 +395,25 @@ app.get('/teacher/totalscores',isTeacher,async(req,res)=>{
     const account = req.session.account;
     const [rows] = await pool.query('select id from users where account = ?',[account]);
     const userId = rows[0].id;
+    const [classRows] = await pool.query('SELECT id FROM classes WHERE teacher_id = ?', [userId]);
+    if (classRows.length === 0) return res.json([]);
+    const classId = classRows[0].id;
+    // 获取本班最新考试日期
+    const [dateRows] = await pool.query(`
+        SELECT MAX(exam_date) AS latest_date FROM scores WHERE class_id = ?
+    `, [classId]);
+    const latestDate = dateRows[0].latest_date;
+    if (!latestDate) return res.json([]);
     const [scores] = await pool.query(`
-        with get_class_id as (
-            select 
-                id
-            from classes where teacher_id = ?
-        ),
-        stu_scores as (
+        with stu_scores as (
             select
             s.student_id as id,
             u.real_name as studentName,
             sum(s.score) as total_score 
-        from scores s, get_class_id gci, users u
-        where u.id = s.student_id and gci.id = s.class_id
-        group by s.student_id
+            from scores s
+            join users u on s.student_id = u.id
+            where s.class_id = ? and s.exam_date = ?
+            group by s.student_id
         )
         select 
             id,
@@ -401,7 +421,7 @@ app.get('/teacher/totalscores',isTeacher,async(req,res)=>{
             total_score,
             rank() over (order by total_score desc) as class_rank
         from stu_scores
-    `,[userId]);
+    `,[classId, latestDate]);
     res.json(scores);
 });
 
@@ -445,7 +465,7 @@ app.get('/teacher/subjectgeneral',isTeacher,async(req,res)=>{
 // 获取单科满分
 app.post('/teacher/fullmark',isTeacher,async(req,res)=>{
     const subject = req.body.subject;
-    const [rows] = await pool.query('select full_mark from scores where subject = ?',[subject]);
+    const [rows] = await pool.query('select full_mark from scores where subject = ? limit 1',[subject]);
     res.json(rows[0]);
 });
 
@@ -461,11 +481,11 @@ app.post('/teacher/scores',isTeacher,async(req,res)=>{
     // 教师信息
     const {id: userId, real_name: user_name, identity} = rows[0];
     const [cid] = await pool.query('SELECT id FROM classes WHERE teacher_id = ?', [userId]);
-    classId = cid[0].id;
-    if (!classId) return res.json({ success: false,message: '无权限' });
+    const classId = cid[0].id;
+    if (!classId) return res.status(403).json({ success: false,message: '无权限' });
     const [stu] = await pool.query('SELECT 1 FROM class_members WHERE student_id = ? AND class_id = ?', [studentId, classId]);
     const student = stu[0];
-    if (!student) return res.json({ success: false,message: '不能修改非本班学生成绩' });
+    if (!student) return res.status(403).json({ success: false,message: '不能修改非本班学生成绩' });
     const [response] = await pool.query('UPDATE scores SET score = ? WHERE student_id = ? AND subject = ?', [newScore, studentId, subject]);
     if (response.affectedRows === 1) 
     {
@@ -479,7 +499,7 @@ app.post('/teacher/scores',isTeacher,async(req,res)=>{
         );
         res.json({ success: true,message: '修改成功'});
     }
-    else res.json({ success: false,message: '修改失败'});
+    else res.status(500).json({ success: false,message: '修改失败'});
 });
 
 // 获取通知
@@ -488,9 +508,9 @@ app.get('/teacher/notices',isTeacher,async(req,res)=>{
     const [rows] = await pool.query('select id,identity,real_name from users where account = ?',[account]);
     const { id:userId, identity, real_name:teacher_name } = rows[0];
     const [cid] = await pool.query('SELECT id FROM classes WHERE teacher_id = ?', [userId]);
-    classId = cid[0].id;
+    const classId = cid[0].id;
     if (identity !== 'teacher') {
-        return res.json({ success: false,message: '无权限获取通知' });
+        return res.status(403).json({ success: false,message: '无权限获取通知' });
     }
     const sql = `
         SELECT 
@@ -528,7 +548,7 @@ app.get('/teacher/notices',isTeacher,async(req,res)=>{
         res.json(notices);
     } catch (err) {
         console.error(err);
-        res.json({ success: false,message: '数据库错误' });
+        res.status(500).json({ success: false,message: '数据库错误' });
     }
 });
 
@@ -539,13 +559,13 @@ app.post('/teacher/notices',isTeacher,async(req,res)=>{
     // 教师信息
     const {id: userId, real_name: user_name, identity} = rows[0];
     const [cid] = await pool.query('SELECT id FROM classes WHERE teacher_id = ?', [userId]);
-    classId = cid[0].id;
+    const classId = cid[0].id;
     if (identity !== 'teacher') {
-        return res.json({ success: false,message: '无权限发布通知' });
+        return res.status(403).json({ success: false,message: '无权限发布通知' });
     }
     const { title, content } = req.body;
     if (!title || !content) {
-        return res.json({ success: false,message: '标题和内容不能为空' });
+        return res.status(400).json({ success: false,message: '标题和内容不能为空' });
     }
     const publishTime = new Date();
     const sql = `
@@ -575,7 +595,7 @@ app.post('/teacher/notices',isTeacher,async(req,res)=>{
         res.json(newNotice);
     } catch (err) {
         console.error(err);
-        res.json({ success: false,message: '数据库错误' });
+        res.status(500).json({ success: false,message: '数据库错误' });
     }
 });
 
@@ -583,24 +603,24 @@ app.post('/teacher/notices',isTeacher,async(req,res)=>{
 app.put('/teacher/notices/:id',isTeacher,async(req,res)=>{
     // 拿 id, 真名, 所属班级
     const account = req.session.account;
-    const [rows] = await pool.query('select id,identity from users where account = ?',[account]);
+    const [rows] = await pool.query('select id,real_name,identity from users where account = ?',[account]);
     // 教师信息
     const {id: userId, real_name: user_name, identity} = rows[0];
     const [cid] = await pool.query('SELECT id FROM classes WHERE teacher_id = ?', [userId]);
-    classId = cid[0].id;
+    const classId = cid[0].id;
     if (identity !== 'teacher') {
-        return res.json({ success: false,message: '无权限编辑通知' });
+        return res.status(403).json({ success: false,message: '无权限编辑通知' });
     }
     const { title, content } = req.body;
     if (!title || !content) {
-        return res.json({ success: false,message: '标题和内容不能为空' });
+        return res.status(400).json({ success: false,message: '标题和内容不能为空' });
     }
     // 拿通知id
     const noticeId = parseInt(req.params.id);
     // 检查当前班级里是否存在该通知
     const [_rows] = await pool.query('select class_id from notices where id = ? and is_deleted = 0',[noticeId]);
     if (_rows.length === 0) {
-        return res.json({ success: false, message: '通知不存在或已被删除' });
+        return res.status(404).json({ success: false, message: '通知不存在或已被删除' });
     }
     if (_rows[0].class_id !== classId) {
         return res.status(403).json({ success: false, message: '您只能修改自己班级的通知' });
@@ -622,19 +642,19 @@ app.put('/teacher/notices/:id',isTeacher,async(req,res)=>{
 app.delete('/teacher/notices/:id',isTeacher,async(req,res)=>{
     // 拿 id, 真名, 所属班级
     const account = req.session.account;
-    const [rows] = await pool.query('select id,identity from users where account = ?',[account]);
+    const [rows] = await pool.query('select id,real_name,identity from users where account = ?',[account]);
     const {id: userId, real_name: user_name, identity} = rows[0];
     const [cid] = await pool.query('SELECT id FROM classes WHERE teacher_id = ?', [userId]);
-    classId = cid[0].id;
+    const classId = cid[0].id;
     if (identity !== 'teacher') {
-        return res.json({ success: false,message: '无权限编辑通知' });
+        return res.status(403).json({ success: false,message: '无权限编辑通知' });
     }
     // 拿通知id
     const noticeId = parseInt(req.params.id);
     // 检查当前班级里是否存在该通知
     const [_rows] = await pool.query('select class_id,title from notices where id = ? and is_deleted = 0',[noticeId]);
     if (_rows.length === 0) {
-        return res.json({ success: false, message: '通知不存在或已被删除' });
+        return res.status(404).json({ success: false, message: '通知不存在或已被删除' });
     }
     if (_rows[0].class_id !== classId) {
         return res.status(403).json({ success: false, message: '您只能删除自己班级的通知' });
@@ -660,9 +680,9 @@ app.get('/teacher/logs',isTeacher,async(req,res)=>{
     const [rows] = await pool.query('select id,identity from users where account = ?',[account]);
     const {id: userId, real_name: user_name, identity} = rows[0];
     const [cid] = await pool.query('SELECT id FROM classes WHERE teacher_id = ?', [userId]);
-    classId = cid[0].id;
+    const classId = cid[0].id;
     if (identity !== 'teacher') {
-        return res.json({ success: false,message: '无权限编辑通知' });
+        return res.status(403).json({ success: false,message: '无权限编辑通知' });
     }
     // 当前页数
     let page = parseInt(req.query.page) || 1;
@@ -697,16 +717,16 @@ app.get('/teacher/notices/:id/read-status',isTeacher,async(req,res)=>{
     const [rows] = await pool.query('select id,identity from users where account = ?',[account]);
     const {id: userId, real_name: user_name, identity} = rows[0];
     const [cid] = await pool.query('SELECT id FROM classes WHERE teacher_id = ?', [userId]);
-    classId = cid[0].id;
+    const classId = cid[0].id;
     if (identity !== 'teacher') {
-        return res.json({ success: false,message: '无权限获取通知' });
+        return res.status(403).json({ success: false,message: '无权限获取通知' });
     }
     // 拿通知id
     const noticeId = parseInt(req.params.id);
     // 检查当前班级里是否存在该通知
     const [_rows] = await pool.query('select class_id,title from notices where id = ? and is_deleted = 0',[noticeId]);
     if (_rows.length === 0) {
-        return res.json({ success: false, message: '通知不存在或已被删除' });
+        return res.status(404).json({ success: false, message: '通知不存在或已被删除' });
     }
     if (_rows[0].class_id !== classId) {
         return res.status(403).json({ success: false, message: '您只能获取自己班级的通知' });
@@ -744,12 +764,12 @@ app.get('/teacher/notices/:id/read-status',isTeacher,async(req,res)=>{
 
 app.get('/logout',async(req,res)=>{
     req.session.destroy((err)=>{
-        if (err) res.status.send('注销失败！');
+        if (err) res.status(500).send('注销失败！');
     });
     res.clearCookie('connect.sid');
     res.redirect('/');
 });
 
-app.listen(PORT,()=>{
+app.listen(PORT,HOST,()=>{
     console.log('system launched on http://127.0.0.1:5000');
 })
