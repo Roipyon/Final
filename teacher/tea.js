@@ -20,20 +20,11 @@
     response = await fetch('/teacher/subjectgeneral',{method: 'get'});
     subjectGeneral = await response.json();
     // 班级通知列表 (含已读统计)
-    let notices = [
-        { id: 101, title: "期中考试动员会", content: "下周三下午召开期中动员大会，请同学们准时参加。", publishTime: "2025-04-05 10:00", teacher_name: "王敏", isReadByStudents: 28, totalStu: 42, unreadCount: 14 },
-        { id: 102, title: "数学周测安排", content: "周五早自习进行数学周测，范围:三角函数。", publishTime: "2025-04-07 09:30", teacher_name: "王敏", isReadByStudents: 35, totalStu: 42, unreadCount: 7 },
-        { id: 103, title: "清明假期安全提醒", content: "假期注意交通安全，防溺水。", publishTime: "2025-04-02 16:20", teacher_name: "王敏", isReadByStudents: 42, totalStu: 42, unreadCount: 0 }
-    ];
-    // 班级操作日志模拟
-    let classLogs = [
-        { operator: "王敏", actionType: "成绩修改", content: "修改李明数学成绩为92", operateTime: "2025-04-08 09:12" },
-        { operator: "王敏", actionType: "通知发布", content: "发布通知:期中考试动员会", operateTime: "2025-04-05 10:02" },
-        { operator: "王敏", actionType: "成绩录入", content: "批量导入英语成绩", operateTime: "2025-04-01 14:30" }
-    ];
+    let notices = [];
     let currentSubjectFilter = "总分";
     let currentPageLog = 1;
     let currentEditId = null;
+    let currentEditingNoticeId = null;  // 全局变量，记录正在编辑的通知ID
     const logsPerPage = 5;
 
     function getFilteredScores() {
@@ -51,10 +42,6 @@
     async function renderHome() {
         const unreadNoticesCount = notices.filter(n => n.unreadCount > 0).length;
         const recentNotices = [...notices].sort((a,b)=>new Date(b.publishTime)-new Date(a.publishTime)).slice(0,3);
-        // 总分概况
-        let general = null;
-        response = await fetch('/teacher/general',{method: 'get'});
-        general = await response.json();
         const html = `
             <h3>班级工作台 · ${currentTeacher.className}</h3>
             <p style="margin:8px 0 20px;">欢迎${currentTeacher.name}老师，本周班级整体表现良好，请及时处理未读通知反馈。</p>
@@ -77,17 +64,17 @@
 
     async function refreshAllData() {
         // 单科概况
-        response = await fetch('/teacher/subjectgeneral',{method: 'get'});
-        subjectGeneral = await response.json();
+        const response1 = await fetch('/teacher/subjectgeneral',{method: 'get'});
+        subjectGeneral = await response1.json();
         // 总分概况
-        response = await fetch('/teacher/general',{method: 'get'});
-        general = await response.json();
+        const response2 = await fetch('/teacher/general',{method: 'get'});
+        general = await response2.json();
         // 成绩数据 (本班)
-        response = await fetch('/teacher/scores',{method: 'get'});
-        scoresData = await response.json();
+        const response3 = await fetch('/teacher/scores',{method: 'get'});
+        scoresData = await response3.json();
         // 本班每人总分
-        response = await fetch('/teacher/totalscores',{method: 'get'});
-        scoresTotal = await response.json();
+        const response4 = await fetch('/teacher/totalscores',{method: 'get'});
+        scoresTotal = await response4.json();
     }
 
     async function renderScoreModule() {
@@ -174,6 +161,11 @@
     async function confirmEditScore() {
         const newScore = parseFloat(document.getElementById('editScore').value).toFixed(1);
         const scoreItem = scoresData.find(s => (s.id === currentEditId && s.subject === currentSubjectFilter));
+        if (currentSubjectFilter === '总分') {
+            alert("总分由各科成绩自动计算，不可直接编辑");
+            closeEditModal();
+            return;
+        }
         if (!scoreItem) {
             alert('成绩记录不存在');
             closeEditModal();
@@ -205,11 +197,10 @@
         const result = await response.json();
         if (result.success) {
             alert('成绩修改成功');
-            // 更新本地数据
-            scoreItem.score = parseFloat(newScore);
-            // 刷新页面显示
-            renderScoreModule();
-            renderHome();
+            // 刷新当前成绩模块（会重新渲染表格和统计）
+            await renderScoreModule();
+            // 刷新首页（使用更新后的 general）
+            await renderHome();
             closeEditModal();
         } else {
             alert(result.message || '修改失败，请重试');
@@ -234,10 +225,32 @@
         link.href = URL.createObjectURL(blob); link.download = `${currentTeacher.className}_${currentSubjectFilter}_成绩.csv`; link.click();
     }
 
+    // 获取通知列表
+    async function refreshNoticeList() {
+        try {
+            const response = await fetch('/teacher/notices');
+            if (response.ok) {
+                const data = await response.json();
+                notices = data.map(n => ({
+                    ...n,
+                    isReadByStudents: n.readCount,
+                    totalStu: n.totalStudents,
+                    unreadCount: n.unreadCount
+                })); // 统一字段
+                if (document.querySelector('#noticeSection.active')) {
+                    renderNoticeModule();
+                }
+            } else {
+                console.error('获取通知失败');
+            }
+        } catch (err) {
+            console.error('网络错误', err);
+        }
+    }
+
     // 通知模块 - 采用学生版卡片样式
     function renderNoticeModule() {
-        const sortedNotices = [...notices].sort((a,b)=>new Date(b.publishTime)-new Date(a.publishTime));
-        const noticeHtml = sortedNotices.map(notice => `
+        const noticeHtml = notices.map(notice => `
             <div class="notice-item ${notice.unreadCount > 0 ? 'unread' : ''}" data-id="${notice.id}">
                 <div class="notice-title">
                     <strong>${notice.title}</strong>
@@ -245,7 +258,7 @@
                     ${notice.unreadCount > 0 ? '<span class="notice-badge-sm">未读剩余</span>' : ''}
                 </div>
                 <div class="notice-content">${notice.content}</div>
-                <div class="notice-time">${notice.publishTime} | 班主任：${notice.teacher_name}</div>
+                <div class="notice-time">${new Date(notice.publishTime).toLocaleString()} | 班主任：${notice.teacher_name}</div>
                 <div class="inline-actions">
                     <button class="btn-sm edit-notice" data-id="${notice.id}">编辑</button>
                     <button class="btn-sm btn-danger del-notice" data-id="${notice.id}">删除</button>
@@ -272,11 +285,7 @@
             const title = document.getElementById('newTitle').value.trim();
             const content = document.getElementById('newContent').innerText.trim();
             if(title && content) {
-                const newNotice = { id: Date.now(), title, content, publishTime: new Date().toLocaleString(), teacher_name: "王敏", isReadByStudents: 0, totalStu: 42, unreadCount: 42 };
-                notices.unshift(newNotice);
-                renderNoticeModule(); 
-                renderHome();
-                alert("通知已发布");
+                publishNotice(title, content);
             } else alert("请填写完整");
         });
         document.querySelectorAll('.edit-notice').forEach(btn => {
@@ -285,34 +294,117 @@
                 const id = parseInt(btn.dataset.id);
                 const notice = notices.find(n => n.id === id);
                 if(notice){
-                    const newTitle = prompt("编辑标题", notice.title);
-                    const newContent = prompt("编辑内容", notice.content);
-                    if(newTitle && newContent) { notice.title = newTitle; notice.content = newContent; renderNoticeModule(); renderHome(); alert("已更新");}
+                    currentEditingNoticeId = id;
+                    // 填充模态框现有数据
+                    document.getElementById('editNoticeTitle').value = notice.title;
+                    document.getElementById('editNoticeContent').value = notice.content;
+                    // 显示模态框
+                    document.getElementById('editNoticeModal').style.display = 'flex';
                 }
             });
         });
         document.querySelectorAll('.del-notice').forEach(btn => {
-            btn.addEventListener('click', (e) => { e.stopPropagation(); if(confirm("删除通知不可恢复")){ const id = parseInt(btn.dataset.id); notices = notices.filter(n => n.id !== id); renderNoticeModule(); renderHome(); } });
+            btn.addEventListener('click', async(e) => { 
+                e.stopPropagation(); 
+                if(confirm("删除通知不可恢复"))
+                { 
+                    const id = parseInt(btn.dataset.id);
+                    const res = await fetch(`/teacher/notices/${id}`, { method: 'DELETE' });
+                    if (res.ok) {
+                        if (currentEditingNoticeId === id) currentEditingNoticeId = null;
+                        await refreshNoticeList();  // 重新拉取并刷新
+                    } else {
+                        alert("删除失败");
+                    }
+                } 
+            });
         });
         document.querySelectorAll('.view-readlist').forEach(btn => {
             btn.addEventListener('click', (e) => { e.stopPropagation(); alert("已读名单(演示): 已读28人: 李明,王芳等；未读14人"); });
         });
     }
 
-    function renderLogModule() {
-        const totalPages = Math.ceil(classLogs.length / logsPerPage);
-        const start = (currentPageLog-1)*logsPerPage;
-        const pageLogs = classLogs.slice(start, start+logsPerPage);
+    // 发布通知
+    async function publishNotice(title, content) {
+        const res = await fetch('/teacher/notices', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title, content })
+        });
+        if (res.ok) {
+            await refreshNoticeList();   // 重新获取最新列表
+        } else {
+            alert('发布失败');
+        }
+    }
+
+    // 编辑通知
+    async function editNotice(id, title, content) {
+        const res = await fetch(`/teacher/notices/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title, content })
+        });
+        if (res.ok) {
+            await refreshNoticeList();
+        } else {
+            alert("更新失败");
+        }
+    }
+
+    function bindEditNoticeModalEvents() {
+        const modal = document.getElementById('editNoticeModal');
+        const cancelBtn = document.getElementById('editNoticeCancelBtn');
+        const confirmBtn = document.getElementById('editNoticeConfirmBtn');
+
+        // 取消：关闭模态框，清空当前编辑ID
+        cancelBtn?.addEventListener('click', () => {
+            modal.style.display = 'none';
+            currentEditingNoticeId = null;
+        });
+
+        // 确认：执行更新
+        confirmBtn?.addEventListener('click', async () => {
+            const newTitle = document.getElementById('editNoticeTitle').value.trim();
+            const newContent = document.getElementById('editNoticeContent').value.trim();
+            if (!newTitle || !newContent) {
+                alert("标题和内容不能为空");
+                return;
+            }
+            await editNotice(currentEditingNoticeId,newTitle,newContent);
+            // 关闭模态框并清空ID
+            document.getElementById('editNoticeModal').style.display = 'none';
+            currentEditingNoticeId = null;
+        });
+
+        // 点击遮罩层关闭
+        modal?.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                modal.style.display = 'none';
+                currentEditingNoticeId = null;
+            }
+        });
+    }
+    
+    async function renderLogModule() {
+        const page = currentPageLog;
+        const response = await fetch(`/teacher/logs?page=${page}&pageSize=${logsPerPage}`);
+        const data = await response.json();
+        const logs = data.logs;
+        const totalPages = Math.ceil(data.total / logsPerPage);
         const html = `
             <h3>班级操作日志 (班主任可见)</h3>
             <table class="table"><thead><tr><th>操作人</th><th>操作类型</th><th>操作内容</th><th>操作时间</th></tr></thead><tbody>
-            ${pageLogs.map(log => `<tr><td>${log.operator}</td><td>${log.actionType}</td><td>${log.content}</td><td>${log.operateTime}</td></tr>`).join('')}
+            ${logs.map(log => `<tr><td>${log.user_name}</td><td>${log.operation_type}</td><td>${log.operation_content}</td><td>${new Date(log.created_at).toLocaleString()}</td></tr>`).join('')}
             </tbody></table>
             <div class="pagination" id="logPagination">${Array.from({length: totalPages}, (_,i)=>`<button class="page-btn ${i+1===currentPageLog?'active-page':''}" data-page="${i+1}">${i+1}</button>`).join('')}</div>
         `;
         document.getElementById('logSection').innerHTML = html;
         document.querySelectorAll('#logPagination .page-btn').forEach(btn => {
-            btn.addEventListener('click', () => { currentPageLog = parseInt(btn.dataset.page); renderLogModule(); });
+            btn.addEventListener('click', () => { 
+                currentPageLog = parseInt(btn.dataset.page); 
+                renderLogModule(); 
+            });
         });
     }
 
@@ -330,8 +422,9 @@
         const sidebar = document.getElementById('sidebar');
         if(sidebar.classList.contains('show')) sidebar.classList.remove('show');
     }
-    function init() {
+    async function init() {
         renderHeaderInfo();
+        await refreshNoticeList();
         document.querySelectorAll('.sidebar-menu a').forEach(link => {
             link.addEventListener('click', (e) => { switchToSection(link.getAttribute('data-nav')); });
         });
@@ -343,6 +436,7 @@
         }
         switchToSection('home');
         bindEditModalEvents();
+        bindEditNoticeModalEvents();
     }
     init();
 })();

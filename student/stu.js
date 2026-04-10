@@ -105,7 +105,7 @@
             </div>
             <div class="summary-flex">
                 <div class="summary-card"><div class="summary-number">${personalTotal.total}</div><div>总分</div></div>
-                <div class="summary-card"><div class="summary-number">${parseInt(personalTotal.totalAvg).toFixed(1)}</div><div>平均分</div></div>
+                <div class="summary-card"><div class="summary-number">${Number(personalTotal.totalAvg).toFixed(1)}</div><div>平均分</div></div>
                 <div class="summary-card"><div class="summary-number">${personalTotal.totalRank}</div><div>班级排名</div></div>
             </div>
             <div style="margin-top: 24px;">
@@ -163,6 +163,9 @@
             if (e.subject === currentSubjectFilter)
             {stat = e;return;}
         });
+        if (!stat) {
+            stat = { avg: '--', max: '--', min: '--', passCount: 0, totalStu: 0, passRate: '0%' };
+        }
         const scoreHtml = `
             <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; margin-bottom:16px;">
                 <h3>我的成绩 · ${currentStudent.className}</h3>
