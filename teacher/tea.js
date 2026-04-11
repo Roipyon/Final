@@ -25,7 +25,7 @@
     let currentPageLog = 1;
     let currentEditId = null;
     let currentEditingNoticeId = null;  // 全局变量，记录正在编辑的通知ID
-    const logsPerPage = 5;
+    const logsPerPage = 15;
 
     function getFilteredScores() {
         return scoresData.filter(s => s.subject === currentSubjectFilter);
@@ -134,7 +134,13 @@
         `;
         document.getElementById('scoreSection').innerHTML = html;
         document.getElementById('subjectSelect')?.addEventListener('change', (e) => { currentSubjectFilter = e.target.value; renderScoreModule(); });
-        document.getElementById('exportScoreBtn')?.addEventListener('click', () => exportScoresToCSV());
+        document.getElementById('exportScoreBtn')?.addEventListener('click', () => {
+            if (currentSubjectFilter === '总分') {
+                exportTotalScoresToCSV();
+            } else {
+                exportScoresToCSV();
+            }
+        });
         // 编辑成绩事件
         document.querySelectorAll('.edit-score').forEach(btn => {
             btn.addEventListener('click', (e) => {
@@ -215,6 +221,22 @@
         modal.addEventListener('click', (e) => {
             if (e.target === modal) closeEditModal();
         });
+    }
+
+    function exportTotalScoresToCSV() {
+        if (!scoresTotal || scoresTotal.length === 0) {
+            alert('暂无总分数据');
+            return;
+        }
+        let csv = "姓名,学号,总分,班级排名\n";
+        for (let s of scoresTotal) {
+            csv += `${s.studentName},${s.id},${s.total_score},${s.class_rank}\n`;
+        }
+        const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = `${currentTeacher.className}_总分成绩.csv`;
+        link.click();
     }
 
     function exportScoresToCSV() {

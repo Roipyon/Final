@@ -27,12 +27,11 @@
     // 通知分页与筛选状态
     let currentNoticePage = 1;
     let noticeFilter = "all";   // 'all' 或 'unread'
-    const NOTICES_PER_PAGE = 3; // 每一页通知的通知数
+    const NOTICES_PER_PAGE = 5; // 每一页通知的通知数
 
     // 成绩科目筛选
     let currentSubjectFilter = "数学";
 
-    // ---------- 辅助函数 ----------
     function getUnreadCount() {
         return notices.filter(n => !n.isRead).length;
     }
@@ -156,7 +155,7 @@
         });
     }
 
-    // ---------- 成绩模块渲染（个人成绩 + 班级统计 + 科目筛选）----------
+    // 成绩模块渲染（个人成绩 + 班级统计 + 科目筛选）
     function renderScoreModule() {
         let stat = null;
         classStatBySubject.forEach(e=>{
@@ -171,7 +170,7 @@
                 <h3>我的成绩 · ${currentStudent.className}</h3>
                 <div class="filter-bar">
                     <select id="subjectFilterSelect" class="filter-select">
-                        ${Array.from(classStatBySubject).map(sub => `<option value="${sub.subject}" ${sub.subject === currentSubjectFilter ? 'selected' : ''}>${sub.subject}</option>`).join('')}
+                        ${personalScores.map(sub => `<option value="${sub.subject}" ${sub.subject === currentSubjectFilter ? 'selected' : ''}>${sub.subject}</option>`).join('')}
                     </select>
                 </div>
             </div>
@@ -218,7 +217,7 @@
         }
     }
 
-    // ---------- 通知模块渲染（分页 + 筛选 + 标记已读）----------
+    // 通知模块渲染（分页 + 筛选 + 标记已读）
     function renderNoticeModule() {
         const filteredSorted = getFilteredSortedNotices();
         const totalPages = Math.ceil(filteredSorted.length / NOTICES_PER_PAGE);
@@ -290,7 +289,7 @@
         updateUnreadBadges();
     }
 
-    // ---------- 统一切换模块 ----------
+    // 统一切换模块
     function switchToSection(sectionType) {
         // 更新菜单高亮
         document.querySelectorAll('.sidebar-menu a').forEach(link => {
