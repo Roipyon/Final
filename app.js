@@ -762,6 +762,108 @@ app.get('/teacher/notices/:id/read-status',isTeacher,async(req,res)=>{
     });
 });
 
+// 管理员
+
+// 获取当前用户信息
+app.get('/admin/info',isAdmin,async(req,res)=>{
+    const account = req.session.account;
+    const [rows] = await pool.query('select real_name from users where account = ?',[account]);
+    const { real_name: name } = rows[0];
+    res.json({
+        name: name
+    });
+});
+
+// 获取班级信息
+app.get('/admin/classes',isAdmin,async(req,res)=>{
+    const [classes] = await pool.query(`
+        select 
+            c.id,
+            concat(g.grade_name, c.class_name) as className,
+            u.real_name as teacher,
+            u.id as teacherId,
+            count(*) as studentCount
+        from (classes c, grades g, users u, class_members cm)
+        where cm.class_id = c.id and u.id = c.teacher_id and c.grade_id = g.id
+        group by c.id
+    `);
+    res.json(classes);
+});
+
+// 获取教师信息
+app.get('/admin/teachers',isAdmin,async(req,res)=>{
+    const [teachers] = await pool.query(`
+        select
+            id,
+            real_name as name
+        from users where identity = 'teacher'
+    `);
+    res.json(teachers);
+});
+
+// 获取全量成绩
+app.get('/admin/scores',isAdmin,async(req,res)=>{
+    const [scores] = await pool.query(`
+        select
+            s.id,
+            concat(g.grade_name, c.class_name) as className,
+            u.real_name as studentName,
+            u.id as studentId,
+            s.subject,
+            s.score
+        from scores s
+        inner join users u on s.student_id = u.id
+        inner join classes c on s.class_id = c.id
+        inner join grades g on g.id = c.grade_id
+    `);
+    res.json(scores);
+});
+
+// 获取全量通知
+app.get('/admin/notices',isAdmin,async(req,res)=>{
+    const [notices] = await pool.query(`
+        select
+            n.id,
+            concat (g.grade_name, c.class_name) as className,
+            n.title,
+            n.content,
+            n.publish_time as publishTime,
+            u.real_name as teacher_name,
+            (
+                SELECT COUNT(*)
+                FROM notice_read_status rs
+                WHERE rs.notice_id = n.id AND rs.is_read = 1
+            ) AS readCount,
+            (
+                SELECT COUNT(*)
+                FROM class_members cm
+                WHERE cm.class_id = n.class_id AND cm.status = 1
+            ) AS totalStu
+        FROM notices n
+        inner join classes c on n.class_id = c.id
+        inner join grades g on g.id = c.grade_id
+        inner join users u on n.publisher_id = u.id
+        WHERE n.is_deleted = 0
+        ORDER BY n.publish_time DESC
+    `);
+    res.json(notices);
+});
+
+// 获取全量日志
+app.get('/admin/logs',isAdmin,async(req,res)=>{
+    const [logs] = await pool.query(`
+        select
+            u.real_name as operator,
+            ol.operation_type as operationType,
+            ol.operation_content as content,
+            ol.created_at as operateTime
+        from operation_logs ol
+        inner join users u on ol.user_id = u.id
+        order by operateTime desc
+    `);
+    res.json(logs);
+});
+
 app.get('/logout',async(req,res)=>{
     req.session.destroy((err)=>{
         if (err) res.status(500).send('注销失败！');

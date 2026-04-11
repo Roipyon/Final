@@ -348,3 +348,8 @@ hr {
     padding: 30px;
     color: var(--gray);
 }
+
+.recent-notice-item:hover {
+    background-color: var(--gray-light);
+    transform: translateX(2px);
+}

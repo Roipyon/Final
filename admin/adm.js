@@ -1,46 +1,47 @@
 (async function(){
-    // ---------- 教务主任全局模拟数据 (全权限) ----------
-    const adminInfo = { name: "张宏", role: "教务主任" };
+    let response = null;
+    // 用户信息
+    let currentAdmin = null;
+    response = await fetch('/admin/info',{method: 'get'});
+    currentAdmin = await response.json();
     // 班级数据 (含绑定教师)
-    let classes = [
-        { id: 1, className: "高一(1)班", teacher: "李芳", teacherId: 101, studentCount: 45 },
-        { id: 2, className: "高一(2)班", teacher: "陈明", teacherId: 102, studentCount: 44 },
-        { id: 3, className: "高二(3)班", teacher: "王敏", teacherId: 103, studentCount: 42 }
-    ];
+    let classes = null;
+    response = await fetch('/admin/classes',{method: 'get'});
+    classes = await response.json();
     // 教师池
-    let allTeachers = [
-        { id: 101, name: "李芳" }, { id: 102, name: "陈明" }, { id: 103, name: "王敏" },
-        { id: 104, name: "赵颖" }, { id: 105, name: "孙立" }
-    ];
+    let allTeachers = null;
+    response = await fetch('/admin/teachers',{method: 'get'});
+    allTeachers = await response.json();
     // 全量成绩数据
-    let allScores = [
-        { id: 1, className: "高一(1)班", studentName: "赵磊", studentId: "G10101", subject: "数学", score: 88 },
-        { id: 2, className: "高一(1)班", studentName: "孙丽", studentId: "G10102", subject: "数学", score: 94 },
-        { id: 3, className: "高一(2)班", studentName: "周华", studentId: "G10201", subject: "数学", score: 76 },
-        { id: 4, className: "高二(3)班", studentName: "李明", studentId: "2023001", subject: "数学", score: 92 },
-        { id: 5, className: "高二(3)班", studentName: "王芳", studentId: "2023002", subject: "英语", score: 91 },
-        { id: 6, className: "高一(1)班", studentName: "赵磊", studentId: "G10101", subject: "英语", score: 85 },
-    ];
+    let allScores = null;
+    response = await fetch('/admin/scores',{method: 'get'});
+    allScores = await response.json();
     // 全量通知 (跨班级) - 使用统一通知卡片样式展示
-    let allNotices = [
-        { id: 201, className: "高一(1)班", title: "家长会通知", content: "本周五下午3点召开家长会，请各位同学通知家长准时参加。", publishTime: "2025-04-06 14:00", teacher_name: "李芳", readCount: 30, totalStu: 45, isUnreadForAdmin: false },
-        { id: 202, className: "高二(3)班", title: "期中考试动员", content: "下周三下午召开期中动员大会，请同学们准时参加。", publishTime: "2025-04-05 10:00", teacher_name: "王敏", readCount: 28, totalStu: 42, isUnreadForAdmin: false },
-        { id: 203, className: "高一(2)班", title: "数学竞赛选拔", content: "有意参加数学竞赛的同学请到办公室报名，截止本周五。", publishTime: "2025-04-07 09:00", teacher_name: "陈明", readCount: 20, totalStu: 44, isUnreadForAdmin: true }
-    ];
+    let allNotices = null;
+    response = await fetch('/admin/notices',{method: 'get'});
+    allNotices = await response.json();
+    // 在组装通知数据时
+    allNotices.forEach(n => {
+        n.isUnreadForAdmin = isNewNotice(n.publishTime);
+    });
     // 系统全量操作日志
-    let systemLogs = [
-        { operator: "张宏", actionType: "班级管理", content: "新增班级 高一(3)班", operateTime: "2025-04-08 08:30" },
-        { operator: "王敏", actionType: "成绩修改", content: "修改李明数学成绩为92", operateTime: "2025-04-07 15:20" },
-        { operator: "李芳", actionType: "通知发布", content: "发布家长会通知", operateTime: "2025-04-06 14:05" },
-        { operator: "张宏", actionType: "教师绑定", content: "将赵颖老师绑定至高一(3)班", operateTime: "2025-04-05 11:12" },
-        { operator: "陈明", actionType: "成绩录入", content: "批量导入数学成绩", operateTime: "2025-04-04 09:45" }
-    ];
-    
+    let systemLogs = null;
+    response = await fetch('/admin/logs',{method: 'get'});
+    systemLogs = await response.json();
+
     // 成绩筛选条件
     let globalSubjectFilter = "数学";
     let globalClassFilter = "所有班级";
     let currentLogPage = 1;
-    const logsPerPage = 5;
+    const logsPerPage = 15;
+
+    // 辅助函数：判断是否为24小时内发布的新通知
+    function isNewNotice(publishTime) {
+        const NEW_HOURS = 24;
+        const now = new Date();
+        const diffHours = (now - new Date(publishTime)) / (1000 * 60 * 60);
+        return diffHours <= NEW_HOURS;
+    }
 
     function getClassOptions() {
         let opts = '<option value="所有班级">所有班级</option>';
@@ -69,29 +70,80 @@
         return { avg, max, min, passCount, total, passRate };
     }
 
+    // 渲染顶部信息
+    function renderHeaderInfo()
+    {
+        document.querySelector('.user-info .user-avatar').innerText = `${currentAdmin.name.slice(0,1)}`;
+        document.querySelector('.user-info span').innerText = `${currentAdmin.name} (管理员)`;
+    }
+
     // 渲染总览看板
     function renderDashboard() {
         const totalClasses = classes.length;
         const totalStudents = classes.reduce((sum,c)=>sum+c.studentCount,0);
         const totalNotices = allNotices.length;
+
+         // 获取最新3条通知（按发布时间倒序）
+        const latestNotices = [...allNotices]
+            .sort((a,b) => new Date(b.publishTime) - new Date(a.publishTime))
+            .slice(0, 3);
+        const noticeListHtml = latestNotices.map(notice => {
+            const isNew = isNewNotice(notice.publishTime);
+            return `
+                <div class="recent-notice-item" data-notice-id="${notice.id}" style="cursor:pointer; padding:12px; border-bottom:1px solid var(--border); transition:0.2s;">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <strong>${notice.title}</strong>
+                        ${isNew ? '<span class="notice-badge-sm" style="background:var(--warning);">新</span>' : ''}
+                    </div>
+                    <div style="font-size:12px; color:var(--gray); margin-top:4px;">
+                        ${notice.className} · ${new Date(notice.publishTime).toLocaleString()}
+                    </div>
+                    <div style="font-size:13px; color:var(--gray-dark); margin-top:6px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                        ${notice.content.substring(0, 60)}${notice.content.length > 60 ? '…' : ''}
+                    </div>
+                </div>
+            `;
+        }).join('');
+
         const html = `
             <h3>教务总览看板</h3>
-            <p style="margin:8px 0 20px;">欢迎张主任，全校教学数据实时监控，支持班级/教师绑定及全权限管理。</p>
+            <p style="margin:8px 0 20px;">欢迎${currentAdmin.name}，全校教学数据实时监控，支持班级/教师绑定及全权限管理。</p>
             <div class="stats-grid">
                 <div class="stat-card"><div class="stat-value">${totalClasses}</div><div>班级总数</div></div>
                 <div class="stat-card"><div class="stat-value">${totalStudents}</div><div>在校学生</div></div>
                 <div class="stat-card"><div class="stat-value">${allTeachers.length}</div><div>在职教师</div></div>
                 <div class="stat-card"><div class="stat-value">${totalNotices}</div><div>班级通知</div></div>
             </div>
-            <div style="margin-top:24px;"><h4>最近操作日志</h4>
-            <table class="table"><thead><tr><th>操作人</th><th>操作类型</th><th>内容</th><th>时间</th></tr></thead>
-            <tbody>${systemLogs.slice(0,3).map(l => `<tr><td>${l.operator}</td><td>${l.actionType}</td><td>${l.content}</td><td>${l.operateTime}</td></tr>`).join('')}</tbody></table>
-            <div style="text-align:right;margin-top:12px;"><a href="javascript:void(0)" data-nav="systemLog" class="nav-link" style="color:var(--primary);">查看全部日志 →</a></div>
+            <div class="card" style="margin-top: 24px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                    <h4>最新通知</h4>
+                    <a href="javascript:void(0)" class="nav-link" data-nav="noticeAll" style="color:var(--primary); font-size:13px;">查看全部 →</a>
+                </div>
+                <div id="dashboardNoticeList">
+                    ${latestNotices.length ? noticeListHtml : '<div class="empty-tip">暂无通知</div>'}
+                </div>
+            </div>
+            <div style="margin-top:24px;">
+                <h4>最近操作日志</h4>
+                <table class="table"><thead><tr><th>操作人</th><th>操作类型</th><th>内容</th><th>时间</th></tr></thead>
+                <tbody>${systemLogs.slice(0,3).map(l => `<tr><td>${l.operator}</td><td>${l.operationType}</td><td>${l.content}</td><td>${new Date(l.operateTime).toLocaleString()}</td></tr>`).join('')}</tbody></table>
+                <div style="text-align:right;margin-top:12px;">
+                    <a href="javascript:void(0)" data-nav="systemLog" class="nav-link" style="color:var(--primary);">查看全部日志 →</a>
+                </div>
             </div>
         `;
         document.getElementById('dashboardSection').innerHTML = html;
+        // 绑定最新通知的点击事件（跳转到通知模块并定位）
+        document.querySelectorAll('#dashboardNoticeList .recent-notice-item').forEach(el => {
+            el.addEventListener('click', (e) => {
+                // 跳转到全量通知模块
+                switchToSection('noticeAll');
+            });
+        });
         document.querySelectorAll('.nav-link').forEach(link => {
-            link.addEventListener('click', (e) => { switchToSection(link.getAttribute('data-nav')); });
+            link.addEventListener('click', (e) => { 
+                switchToSection(link.getAttribute('data-nav'));
+            });
         });
     }
 
@@ -135,7 +187,7 @@
                 classes.push({ id: newId, className: name, teacher: "", teacherId: null, studentCount: 0 });
                 renderClassManage(); renderDashboard();
                 alert(`班级 ${name} 已创建`);
-                systemLogs.unshift({ operator: "张宏", actionType: "班级管理", content: `新增班级 ${name}`, operateTime: new Date().toLocaleString() });
+                systemLogs.unshift({ operator: "张宏", operationType: "班级管理", content: `新增班级 ${name}`, operateTime: new Date().toLocaleString() });
             } else alert("请输入班级名称");
         });
         document.querySelectorAll('.bind-teacher-select').forEach(select => {
@@ -149,7 +201,7 @@
                     classItem.teacherId = teacher.id;
                     alert(`已将 ${classItem.className} 绑定至 ${teacher.name}`);
                     renderClassManage();
-                    systemLogs.unshift({ operator: "张宏", actionType: "教师绑定", content: `${teacher.name} 绑定至 ${classItem.className}`, operateTime: new Date().toLocaleString() });
+                    systemLogs.unshift({ operator: "张宏", operationType: "教师绑定", content: `${teacher.name} 绑定至 ${classItem.className}`, operateTime: new Date().toLocaleString() });
                 } else if(!teacherId && classItem) {
                     classItem.teacher = ""; classItem.teacherId = null;
                     alert("已解绑班主任");
@@ -231,7 +283,7 @@
                 const newId = Date.now();
                 allScores.push({ id: newId, className, studentName, studentId: "auto", subject, score: parseInt(score) });
                 renderScoreAll(); renderDashboard();
-                systemLogs.unshift({ operator: "张宏", actionType: "成绩添加", content: `添加${className} ${studentName} ${subject}成绩`, operateTime: new Date().toLocaleString() });
+                systemLogs.unshift({ operator: "张宏", operationType: "成绩添加", content: `添加${className} ${studentName} ${subject}成绩`, operateTime: new Date().toLocaleString() });
                 alert("添加成功");
             }
         });
@@ -264,10 +316,10 @@
                 <div class="notice-title">
                     <strong>${notice.title}</strong>
                     <span class="badge badge-info">${notice.className}</span>
-                    ${notice.isUnreadForAdmin ? '<span class="notice-badge-sm">未读提醒</span>' : ''}
+                    ${notice.isUnreadForAdmin ? '<span class="notice-badge-sm">新通知</span>' : ''}
                 </div>
                 <div class="notice-content">${notice.content}</div>
-                <div class="notice-time">${notice.publishTime} | 发布人：${notice.teacher_name} | 已读 ${notice.readCount}/${notice.totalStu}</div>
+                <div class="notice-time">${new Date(notice.publishTime).toLocaleString()} | 发布人：${notice.teacher_name} | 已读 ${notice.readCount}/${notice.totalStu}</div>
             </div>
         `).join('');
         const html = `
@@ -289,7 +341,7 @@
                 if(filterVal !== 'all') filtered = filtered.filter(n => n.className === filterVal);
                 const filteredCards = filtered.map(notice => `
                     <div class="notice-item ${notice.isUnreadForAdmin ? 'unread' : ''}">
-                        <div class="notice-title"><strong>${notice.title}</strong><span class="badge badge-info">${notice.className}</span>${notice.isUnreadForAdmin ? '<span class="notice-badge-sm">未读提醒</span>' : ''}</div>
+                        <div class="notice-title"><strong>${notice.title}</strong><span class="badge badge-info">${notice.className}</span>${notice.isUnreadForAdmin ? '<span class="notice-badge-sm">新通知</span>' : ''}</div>
                         <div class="notice-content">${notice.content}</div>
                         <div class="notice-time">${notice.publishTime} | 发布人：${notice.teacher_name} | 已读 ${notice.readCount}/${notice.totalStu}</div>
                     </div>
@@ -307,7 +359,7 @@
         const html = `
             <h3>系统操作日志 (全权限)</h3>
             <table class="table"><thead><tr><th>操作人</th><th>操作类型</th><th>操作内容</th><th>操作时间</th></tr></thead>
-            <tbody>${pageLogs.map(l => `<tr><td>${l.operator}</td><td>${l.actionType}</td><td>${l.content}</td><td>${l.operateTime}</td></tr>`).join('')}</tbody></table>
+            <tbody>${pageLogs.map(l => `<tr><td>${l.operator}</td><td>${l.operationType}</td><td>${l.content}</td><td>${new Date(l.operateTime).toLocaleString()}</td></tr>`).join('')}</tbody></table>
             <div class="pagination" id="sysLogPagination">${Array.from({length: totalPages}, (_,i)=>`<button class="page-btn ${i+1===currentLogPage?'active-page':''}" data-page="${i+1}">${i+1}</button>`).join('')}</div>
         `;
         document.getElementById('systemLogSection').innerHTML = html;
@@ -334,10 +386,16 @@
     }
 
     function init() {
+        renderHeaderInfo();
         document.querySelectorAll('.sidebar-menu a').forEach(link => {
             link.addEventListener('click', (e) => { switchToSection(link.getAttribute('data-nav')); });
         });
-        document.getElementById('logoutBtn')?.addEventListener('click', ()=> alert("退出登录(演示)"));
+        const logoutBtn = document.getElementById('logoutBtn');
+        if (logoutBtn) {
+            logoutBtn.addEventListener('click', () => {
+                window.location.href = '/logout';
+            });
+        }
         switchToSection('dashboard');
     }
     init();
