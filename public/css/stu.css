@@ -414,3 +414,16 @@ button {
     padding: 2px 8px;
     margin-left: 10px;
 }
+
+/* 页面内导航链接样式 */
+.nav-link {
+    color: var(--primary);
+    text-decoration: none;
+    font-weight: 500;
+    transition: opacity 0.2s;
+}
+
+.nav-link:hover {
+    opacity: 0.8;
+    text-decoration: underline;
+}

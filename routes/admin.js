@@ -7,10 +7,6 @@ const { isAdmin } = require('../middleware/auth');
 
 router.use(isAdmin);
 
-router.get('/',isAdmin,(req,res)=>{
-    res.sendFile(path.join(__dirname, '../admin', 'adm.html'));
-});
-
 // 管理员
 
 // 获取当前用户信息
@@ -505,7 +501,7 @@ router.post('/scores',isAdmin,async(req,res)=>{
         if (!/^\d{4}-\d{2}-\d{2}$/.test(finalExamDate)) {
             finalExamDate = new Date().toISOString().slice(0, 10);
         }
-        
+
         await pool.query(
             `INSERT INTO scores (student_id, class_id, subject, score, exam_date, full_mark)
             VALUES (?, ?, ?, ?, ?, ?)`,

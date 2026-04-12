@@ -1,6 +1,7 @@
 const express = require('express');
 // const bcrypt = require('bcrypt');
 const session = require('express-session');
+const path = require('path');
 const app = express();
 const PORT = 5000;
 const HOST = '0.0.0.0';
@@ -19,16 +20,16 @@ app.use(session({
     cookie: {secure: false}
 }))
 
-app.use('/student', express.static('student'));
-app.use('/teacher', express.static('teacher'));
-app.use('/admin', express.static('admin'));
-app.use('/', express.static('login'));
+app.use(express.static(path.join(__dirname, 'public')));
 
 app.use('/', login);
-app.use('/student', student);
-app.use('/teacher', teacher);
-app.use('/admin', admin);
+app.use('/student', isStudent, student);
+app.use('/teacher', isTeacher, teacher);
+app.use('/admin',isAdmin, admin);
 
+app.get('/admin',(req,res)=>{
+    res.sendFile(path.join(__dirname, '/public', 'adm.html'));
+});
 
 app.listen(PORT,HOST,()=>{
     console.log('system launched on http://127.0.0.1:5000');

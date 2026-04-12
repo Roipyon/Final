@@ -15,7 +15,7 @@
     --gray: #909399;
     --gray-dark: #303133;
     --border: #e4e7ed;
-    --sidebar-width: 220px;
+    --sidebar-width: 240px;
     --header-height: 60px;
 }
 
@@ -96,6 +96,9 @@ button.btn-sm {
     background: var(--warning);
     color: #fff;
 }
+.badge-info {
+    background: var(--gray);
+}
 
 /* 通知卡片样式 - 与学生版完全一致 */
 .notice-item {
@@ -105,7 +108,7 @@ button.btn-sm {
     margin-bottom: 12px;
     background: white;
     transition: all 0.3s ease;
-    cursor: pointer;
+    cursor: default;
 }
 .notice-item:hover {
     box-shadow: 0 2px 8px rgba(0,0,0,0.08);
@@ -136,12 +139,6 @@ button.btn-sm {
     border-radius: 20px;
     padding: 2px 8px;
     margin-left: 10px;
-}
-.inline-actions {
-    display: flex;
-    gap: 12px;
-    margin-top: 12px;
-    justify-content: flex-end;
 }
 
 /* 布局 */
@@ -223,7 +220,7 @@ button.btn-sm {
     width: 36px;
     height: 36px;
     border-radius: 50%;
-    background: var(--secondary);
+    background: var(--primary);
     color: #fff;
     display: flex;
     align-items: center;
@@ -303,19 +300,23 @@ button.btn-sm {
     border: 1px solid var(--border);
     border-radius: 8px;
 }
-.contenteditable-box {
-    min-height: 80px; 
-    border: 1px solid var(--border); 
-    border-radius: 8px; padding: 8px; 
-    overflow-y: auto; 
-    background: white; 
-    line-height: 1.5;
-}
-.flex-btns {
+.class-item {
+    padding: 12px;
+    border-bottom: 1px solid var(--border);
     display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
     gap: 12px;
-    justify-content: flex-end;
-    margin-top: 20px;
+}
+.class-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+hr {
+    margin: 20px 0;
+    border-color: var(--border);
 }
 .menu-toggle {
     display: none;
@@ -325,7 +326,7 @@ button.btn-sm {
 @media (max-width: 768px) {
     .sidebar {
         position: fixed;
-        left: -220px;
+        left: -240px;
         z-index: 99;
         transition: left 0.2s;
     }
@@ -347,16 +348,17 @@ button.btn-sm {
     padding: 30px;
     color: var(--gray);
 }
-.compare-text.up { color: var(--secondary); }
-.compare-text.down { color: var(--danger); }
+
+.recent-notice-item:hover {
+    background-color: var(--gray-light);
+    transform: translateX(2px);
+}
 
 .modal-mask {
     position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0, 0, 0, 0.5);
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: rgba(0,0,0,0.5);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -368,11 +370,244 @@ button.btn-sm {
     width: 90%;
     max-width: 450px;
     padding: 24px;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
 }
 .flex-btns {
     display: flex;
     justify-content: flex-end;
     gap: 12px;
     margin-top: 20px;
+}
+.form-group {
+    margin-bottom: 16px;
+}
+.form-group label {
+    display: block;
+    margin-bottom: 6px;
+    font-weight: 500;
+}
+.form-group input, .form-group textarea, .form-group select {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+}
+
+.filter-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+.sort-controls {
+    margin-left: auto; /* 将排序控件推到右侧 */
+}
+
+/* ---------- 批量导入模态框专用样式 ---------- */
+
+/* 文件上传区域（可点击选择文件） */
+.file-upload-area {
+    border: 2px dashed var(--border);
+    border-radius: 8px;
+    padding: 24px;
+    text-align: center;
+    background: var(--gray-light);
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    margin-bottom: 16px;
+}
+
+.file-upload-area:hover {
+    border-color: var(--primary);
+    background: #eef2ff;
+}
+
+.file-upload-area.dragover {
+    border-color: var(--primary);
+    background: #e0e7ff;
+}
+
+.file-upload-area .upload-icon {
+    font-size: 32px;
+    color: var(--gray);
+    margin-bottom: 8px;
+}
+
+.file-upload-area .upload-text {
+    color: var(--gray-dark);
+    font-size: 14px;
+}
+
+.file-upload-area .upload-hint {
+    color: var(--gray);
+    font-size: 12px;
+    margin-top: 4px;
+}
+
+/* 隐藏的原生 file input */
+#batchImportFileInput {
+    display: none;
+}
+
+/* 预览表格容器（带滚动条） */
+.preview-table-wrapper {
+    max-height: 280px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    margin: 16px 0;
+}
+
+.preview-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    background: white;
+}
+
+.preview-table th {
+    background: var(--gray-light);
+    padding: 10px 8px;
+    font-weight: 600;
+    color: var(--gray-dark);
+    border-bottom: 2px solid var(--border);
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+
+.preview-table td {
+    padding: 8px;
+    border-bottom: 1px solid var(--border-light);
+}
+
+.preview-table tr:last-child td {
+    border-bottom: none;
+}
+
+/* 错误行高亮 */
+.preview-table .error-row {
+    background: #fee2e2;
+}
+
+.preview-table .error-row td {
+    color: #b91c1c;
+}
+
+/* 错误信息提示区 */
+.import-error-summary {
+    background: #fef2f2;
+    border-left: 4px solid #ef4444;
+    padding: 12px 16px;
+    border-radius: 4px;
+    margin: 16px 0;
+    max-height: 150px;
+    overflow-y: auto;
+}
+
+.import-error-summary .error-title {
+    font-weight: 600;
+    color: #b91c1c;
+    margin-bottom: 8px;
+}
+
+.import-error-item {
+    font-size: 13px;
+    color: #7f1d1d;
+    margin-bottom: 4px;
+}
+
+/* 导入进度条（可选，用于大文件异步处理） */
+.import-progress {
+    margin: 16px 0;
+}
+
+.import-progress-bar {
+    height: 8px;
+    background: var(--gray-light);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.import-progress-fill {
+    height: 100%;
+    background: var(--primary);
+    width: 0%;
+    transition: width 0.3s;
+}
+
+/* 导入结果统计卡片 */
+.import-result-stats {
+    display: flex;
+    gap: 16px;
+    margin: 16px 0;
+}
+
+.import-stat {
+    flex: 1;
+    text-align: center;
+    padding: 12px;
+    border-radius: 8px;
+    background: var(--gray-light);
+}
+
+.import-stat .stat-number {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--primary);
+}
+
+.import-stat .stat-label {
+    font-size: 13px;
+    color: var(--gray-dark);
+}
+
+.import-stat.success .stat-number {
+    color: #10b981;
+}
+
+.import-stat.failed .stat-number {
+    color: #ef4444;
+}
+
+/* 下载错误报告链接 */
+.download-error-link {
+    display: inline-block;
+    margin-top: 8px;
+    color: var(--primary);
+    text-decoration: none;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.download-error-link:hover {
+    text-decoration: underline;
+}
+
+/* 导入模态框宽度调整（比普通模态框稍宽） */
+#importModal .modal-container {
+    max-width: 700px;
+    width: 90%;
+}
+
+/* 操作按钮组 */
+.import-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    margin-top: 20px;
+}
+
+/* 页面内导航链接样式 */
+.nav-link {
+    color: var(--primary);
+    text-decoration: none;
+    font-weight: 500;
+    transition: opacity 0.2s;
+}
+
+.nav-link:hover {
+    opacity: 0.8;
+    text-decoration: underline;
 }

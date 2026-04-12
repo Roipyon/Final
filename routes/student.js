@@ -8,7 +8,7 @@ const { isStudent } = require('../middleware/auth');
 router.use(isStudent);
 
 router.get('/',isStudent,(req,res)=>{
-    res.sendFile(path.join(__dirname, '../student', 'stu.html'));
+    res.sendFile(path.join(__dirname, '../public', 'stu.html'));
 });
 
 // 获取当前学生用户信息
