@@ -27,7 +27,10 @@ router.post('/',async(req,res)=>{
             res.status(400).json({ success: false, message: '用户不存在！' });
             return;
         }
-        if (identity != rows[0].identity) res.json({ success: false, message: '当前账号与登录身份不匹配，请重新登录。'});
+        if (identity != rows[0].identity) {
+            res.json({ success: false, message: '当前账号与登录身份不匹配，请重新登录。'});
+            return;
+        };
         if (password === rows[0].password)
         {
             req.session.identity = rows[0].identity;
@@ -39,6 +42,7 @@ router.post('/',async(req,res)=>{
         else 
         {
             res.status(400).json({success: false,message:'密码不正确！'});
+            return;
         }
     }
     catch (err)

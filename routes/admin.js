@@ -23,6 +23,16 @@ router.get('/info',isAdmin,async(req,res)=>{
     });
 });
 
+// 获取全校所有考试日期（去重，倒序）
+router.get('/exams',isAdmin,async(req,res)=>{
+    const [rows] = await pool.query(`
+        SELECT DISTINCT DATE_FORMAT(exam_date, '%Y-%m-%d') as exam_date
+        FROM scores 
+        ORDER BY exam_date DESC
+    `);
+    res.json(rows.map(r => r.exam_date));
+});
+
 // 获取班级信息
 router.get('/classes',isAdmin,async(req,res)=>{
     try {
@@ -73,20 +83,68 @@ router.get('/teachers',isAdmin,async(req,res)=>{
 
 // 获取全量成绩
 router.get('/scores',isAdmin,async(req,res)=>{
-    const [scores] = await pool.query(`
-        select
+    const examDate = req.query.exam_date;
+    let sql = `
+        SELECT
             s.id,
-            concat(g.grade_name, c.class_name) as className,
-            u.real_name as studentName,
-            u.id as studentId,
+            CONCAT(g.grade_name, c.class_name) AS className,
+            u.real_name AS studentName,
+            u.id AS studentId,
             s.subject,
-            s.score
-        from scores s
-        inner join users u on s.student_id = u.id
-        inner join classes c on s.class_id = c.id
-        inner join grades g on g.id = c.grade_id
-    `);
+            s.score,
+            s.exam_date,
+            RANK() OVER (PARTITION BY s.class_id, s.subject ORDER BY s.score DESC) AS class_rank_subject,
+            RANK() OVER (PARTITION BY s.subject, g.id ORDER BY s.score DESC) AS grade_rank_subject
+        FROM scores s
+        INNER JOIN users u ON s.student_id = u.id
+        INNER JOIN classes c ON s.class_id = c.id
+        INNER JOIN grades g ON g.id = c.grade_id
+    `;
+    let params = [];
+    if (examDate) {
+        sql += ` WHERE s.exam_date = ?`;
+        params.push(examDate);
+    }
+    // 可选：按日期、班级、科目排序
+    sql += ` ORDER BY s.exam_date DESC, c.id, s.subject, s.score DESC`;
+    const [scores] = await pool.query(sql, params);
     res.json(scores);
+});
+
+// 获取全量总分（跨班级）
+router.get('/totalscores', isAdmin, async(req,res)=>{
+    const examDate = req.query.exam_date;
+    let sql = `
+        SELECT
+            u.id AS studentId,
+            u.real_name AS studentName,
+            u.account AS studentIdNum,
+            CONCAT(g.grade_name, c.class_name) AS className,
+            SUM(s.score) AS total_score,
+            RANK() OVER (ORDER BY SUM(s.score) DESC) AS total_rank,
+            RANK() OVER (PARTITION BY c.id ORDER BY SUM(s.score) DESC) AS class_rank_in_class
+        FROM scores s
+        INNER JOIN users u ON s.student_id = u.id
+        INNER JOIN classes c ON s.class_id = c.id
+        INNER JOIN grades g ON g.id = c.grade_id
+    `;
+    let params = [];
+    if (examDate) {
+        sql += ` WHERE s.exam_date = ?`;
+        params.push(examDate);
+    }
+    sql += ` GROUP BY u.id, u.real_name, u.account, c.id, g.grade_name, c.class_name ORDER BY total_score DESC`;
+    const [rows] = await pool.query(sql, params);
+    const result = rows.map(row => ({
+        id: row.studentId,
+        studentName: row.studentName,
+        studentId: row.studentIdNum,
+        className: row.className,
+        total_score: row.total_score,
+        class_rank: row.total_rank,
+        class_rank_in_class: row.class_rank_in_class
+    }));
+    res.json(result);
 });
 
 // 获取全量通知

@@ -48,6 +48,13 @@ chooseBtn.forEach((e)=>{
     });
 });
 
+// 提升体验
+document.addEventListener('keydown',(e)=>{
+    if (e.key === 'Enter') {
+        loginBtn.click();
+    }
+});
+
 async function postInfo(ele1,ele2,identity)
 {
     const account = ele1.value.trim();

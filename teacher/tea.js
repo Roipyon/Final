@@ -21,11 +21,26 @@
     subjectGeneral = await response.json();
     // 班级通知列表 (含已读统计)
     let notices = [];
+    let examList = [];              // 考试日期列表（原始ISO格式）
+    let currentExamDate = '';      // 当前选中的考试日期，空字符串表示最新
     let currentSubjectFilter = "总分";
     let currentPageLog = 1;
     let currentEditId = null;
     let currentEditingNoticeId = null;  // 全局变量，记录正在编辑的通知ID
     const logsPerPage = 15;
+
+    // 刷新考试日期
+    async function loadExamList() {
+        const res = await fetch('/teacher/exams');
+        examList = await res.json();
+        const select = document.getElementById('examSelect');
+        if (!select) return;
+        select.innerHTML = '<option value="">最新考试</option>';
+        for (let fullDate of examList) {
+            select.innerHTML += `<option value="${fullDate}">${new Date(fullDate).toLocaleDateString()}</option>`;
+        }
+        if (currentExamDate) select.value = currentExamDate;
+    }
 
     function getFilteredScores() {
         return scoresData.filter(s => s.subject === currentSubjectFilter);
@@ -62,37 +77,63 @@
         });
     }
 
-    async function refreshAllData() {
+    async function refreshAllData(examDate) {
+        // 日期格式化：将 ISO 转换为 YYYY-MM-DD
+        let formattedDate = '';
+        if (examDate) {
+            formattedDate = new Date(examDate).toLocaleDateString().replaceAll('/', '-');
+        }
+        let url = (path) => {
+            let u = path;
+            if (formattedDate) u += `?exam_date=${formattedDate}`;
+            return u;
+        };
         // 单科概况
-        const response1 = await fetch('/teacher/subjectgeneral',{method: 'get'});
+        const response1 = await fetch(url('/teacher/subjectgeneral'),{method: 'get'});
         subjectGeneral = await response1.json();
         // 总分概况
-        const response2 = await fetch('/teacher/general',{method: 'get'});
+        const response2 = await fetch(url('/teacher/general'),{method: 'get'});
         general = await response2.json();
         // 成绩数据 (本班)
-        const response3 = await fetch('/teacher/scores',{method: 'get'});
+        const response3 = await fetch(url('/teacher/scores'),{method: 'get'});
         scoresData = await response3.json();
         // 本班每人总分
-        const response4 = await fetch('/teacher/totalscores',{method: 'get'});
+        const response4 = await fetch(url('/teacher/totalscores'),{method: 'get'});
         scoresTotal = await response4.json();
     }
 
     async function renderScoreModule() {
+        // 根据当前选中的日期刷新数据
+        await refreshAllData(currentExamDate);
+        // 修正科目：如果当前科目不是"总分"且不在新批次的 subjectGeneral 中，则切换到总分
+        if (currentSubjectFilter !== '总分') {
+            const exists = subjectGeneral.some(s => s.subject === currentSubjectFilter);
+            if (!exists) {
+                currentSubjectFilter = '总分';
+                // 注意：subjectSelect 还未生成，暂时不用更新下拉框，因为后面会重新生成 HTML
+            }
+        }
         let tableRows = null;
         let stats = null;
-        await refreshAllData();
         if (currentSubjectFilter === '总分') {
             stats = {
-                avg: general.avg,
-                max: general.max,
-                min: general.min
+                avg: general?.avg ?? 0,
+                max: general?.max ?? 0,
+                min: general?.min ?? 0
             };
-            tableRows = scoresTotal.map(s => `
-                <tr>
-                    <td>${s.studentName}</td><td>${s.id}</td><td>${s.total_score}</td><td>${s.class_rank}</td>
-                    <td></td>
-                </tr>
-            `).join('');
+            if (scoresTotal.length === 0) {
+                tableRows = '<tr><td colspan="5">暂无数据</td></tr>';
+            } else {
+                tableRows = scoresTotal.map(s => `
+                    <tr>
+                        <td>${s.studentName}</td>
+                        <td>${s.id}</td>
+                        <td>${s.total_score}</td>
+                        <td>${s.class_rank}</td>
+                        <td></td>
+                    </tr>
+                `).join('');
+            }
         }
         else {
             const filtered = getFilteredScores(); // 拿到当前学科的所有成绩
@@ -100,16 +141,36 @@
                 if (e.subject === currentSubjectFilter)
                 {stats = e;return;}
             });
-            tableRows = filtered.map(s => `
-                <tr>
-                    <td>${s.studentName}</td><td>${s.id}</td><td>${s.score}</td><td>${s.class_subject_rank}</td>
-                    <td><button class="btn-sm edit-score" data-id="${s.id}" data-subject="${s.subject}" data-score="${s.score}" data-stuid="${s.id}">编辑</button>
-                </tr>
-            `).join('');
+            if (!stats) {
+                stats = {
+                    avg: 0.0,
+                    max: 0,
+                    min: 0,
+                    passCount: 0,
+                    totalStu: 0,
+                    passRate: '0%'
+                };
+            }
+            if (filtered.length === 0) {
+            tableRows = '<tr><td colspan="5">暂无数据</td></tr>';
+            } else {
+                tableRows = filtered.map(s => `
+                    <tr>
+                        <td>${s.studentName}</td>
+                        <td>${s.id}</td>
+                        <td>${s.score}</td>
+                        <td>${s.class_subject_rank}</td>
+                        <td><button class="btn-sm edit-score" data-id="${s.id}" data-subject="${s.subject}" data-score="${s.score}" data-stuid="${s.id}">编辑</button>
+                    </td>
+                `).join('');
+            }
         }
         const html = `
             <div style="display:flex; justify-content:space-between; align-items:center;"><h3>成绩管理 · ${currentSubjectFilter}</h3>
             <div class="filter-bar">
+                <select id="examSelect" class="filter-select">
+                    <option value="">加载中...</option>
+                </select>
                 <select id="subjectSelect" class="filter-select">
                     <option value="总分" ${currentSubjectFilter==='总分'?'selected':''}>总分</option>
                     ${subjectGeneral.map(e => `<option value="${e.subject}" ${currentSubjectFilter===e.subject?'selected':''}>${e.subject}</option>`).join('')}
@@ -133,7 +194,20 @@
             <div class="filter-bar" style="margin-top:16px;"><button id="exportScoreBtn" class="btn-sm">导出当前科目成绩(CSV)</button></div>
         `;
         document.getElementById('scoreSection').innerHTML = html;
-        document.getElementById('subjectSelect')?.addEventListener('change', (e) => { currentSubjectFilter = e.target.value; renderScoreModule(); });
+
+        await loadExamList();
+
+        document.getElementById('subjectSelect')?.addEventListener('change', (e) => { 
+            currentSubjectFilter = e.target.value; 
+            renderScoreModule(); 
+        });
+        const examSelect = document.getElementById('examSelect');
+        if (examSelect) {
+            examSelect.addEventListener('change', async (e) => {
+                currentExamDate = e.target.value;
+                await renderScoreModule();
+            });
+        }
         document.getElementById('exportScoreBtn')?.addEventListener('click', () => {
             if (currentSubjectFilter === '总分') {
                 exportTotalScoresToCSV();
@@ -477,6 +551,7 @@
     }
     async function init() {
         renderHeaderInfo();
+        await refreshAllData('');  // 加载默认最新批次数据
         await refreshNoticeList();
         document.querySelectorAll('.sidebar-menu a').forEach(link => {
             link.addEventListener('click', (e) => { switchToSection(link.getAttribute('data-nav')); });

@@ -31,6 +31,51 @@
 
     // 成绩科目筛选
     let currentSubjectFilter = "数学";
+    let currentExamDate = ''; // 当前选中的考试日期，空表示最新
+    let examList = []; // 考试日期列表
+
+    // 加载考试日期列表
+    async function loadExamList() {
+        const response = await fetch('/student/exams');
+        examList = await response.json();
+        console.log(examList)
+        const select = document.getElementById('examSelect');
+        console.log(select)
+        if (!select) return;
+        select.innerHTML = '<option value="">最新考试</option>';
+        for (let date of examList) {
+            select.innerHTML += `<option value="${date}">${new Date(date).toLocaleDateString()}</option>`;
+        }
+        if (currentExamDate) select.value = currentExamDate;
+    }
+
+    // 刷新数据
+    async function refreshAllData(examDate) {
+        // 将 ISO 日期转换为 YYYY-MM-DD 格式
+        let formattedDate = '';
+        if (examDate) {
+            // examDate 可能是 "2026-04-10T16:00:00.000Z" 或空字符串
+            formattedDate = new Date(examDate).toLocaleDateString().replaceAll('/','-'); // 2026-04-11
+        }
+        // 构建带参数的 URL
+        let gradeUrl = '/student/grade';
+        let totalRankUrl = '/student/totalrank';
+        let classStatUrl = '/student/classstat';
+        if (examDate) {
+            gradeUrl += `?exam_date=${formattedDate}`;
+            totalRankUrl += `?exam_date=${formattedDate}`;
+            classStatUrl += `?exam_date=${formattedDate}`;
+        }
+        // 获取个人成绩
+        let response = await fetch(gradeUrl);
+        personalScores = await response.json();
+        // 获取总分排名
+        response = await fetch(totalRankUrl);
+        personalTotal = await response.json();
+        // 获取班级统计
+        response = await fetch(classStatUrl);
+        classStatBySubject = await response.json();
+    }
 
     function getUnreadCount() {
         return notices.filter(n => !n.isRead).length;
@@ -156,21 +201,50 @@
     }
 
     // 成绩模块渲染（个人成绩 + 班级统计 + 科目筛选）
-    function renderScoreModule() {
+    async function renderScoreModule() {
+        // 根据当前选中的日期刷新数据
+        await refreshAllData(currentExamDate);
+        renderHomeModule();   // 更新首页的统计数字和成绩亮点
+
         let stat = null;
-        classStatBySubject.forEach(e=>{
+        if (classStatBySubject.length === 1) {
+            stat = classStatBySubject[0];
+            currentSubjectFilter = classStatBySubject[0].subject;
+        }
+        else {
+            classStatBySubject.forEach(e=>{
             if (e.subject === currentSubjectFilter)
-            {stat = e;return;}
-        });
+                {stat = e;return;}
+            });
+        }
         if (!stat) {
             stat = { avg: '--', max: '--', min: '--', passCount: 0, totalStu: 0, passRate: '0%' };
         }
-        const scoreHtml = `
+        
+        // 生成个人成绩表格行（使用 personalScores）
+        const tableRows = personalScores.map(s => {
+            const diff = (s.score - s.classAvg).toFixed(1);
+            const diffClass = diff >= 0 ? 'compare-text' : 'compare-text down';
+            const diffSymbol = diff >= 0 ? `+${diff}` : `${diff}`;
+            return `
+                <tr>
+                    <td><strong>${s.subject}</strong></td>
+                    <td>${s.score}</td>
+                    <td>${s.classAvg}</td>
+                    <td>${s.classRank}</td>
+                    <td class="${diffClass}">${diffSymbol}</td>
+                </tr>
+            `;
+        }).join('');
+
+        const html = `
             <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; margin-bottom:16px;">
                 <h3>我的成绩 · ${currentStudent.className}</h3>
                 <div class="filter-bar">
+                    <select id="examSelect" class="filter-select">
+                        <option value="">加载中...</option></select>
                     <select id="subjectFilterSelect" class="filter-select">
-                        ${personalScores.map(sub => `<option value="${sub.subject}" ${sub.subject === currentSubjectFilter ? 'selected' : ''}>${sub.subject}</option>`).join('')}
+                        ${classStatBySubject.map(sub => `<option value="${sub.subject}" ${sub.subject === currentSubjectFilter ? 'selected' : ''}>${sub.subject}</option>`).join('')}
                     </select>
                 </div>
             </div>
@@ -180,18 +254,7 @@
                         <tr><th>科目</th><th>成绩</th><th>班级平均分</th><th>班级排名</th><th>对比均分</th></tr>
                     </thead>
                     <tbody>
-                        ${personalScores.map(s => {
-                            const diff = (s.score - s.classAvg).toFixed(1);
-                            const diffClass = diff >= 0 ? 'compare-text' : 'compare-text down';
-                            const diffSymbol = diff >= 0 ? `+${diff}` : `${diff}`;
-                            return `<tr>
-                                <td><strong>${s.subject}</strong></td>
-                                <td>${s.score}</td>
-                                <td>${s.classAvg}</td>
-                                <td>${s.classRank}</td>
-                                <td class="${diffClass}">${diffSymbol}</td>
-                            </tr>`;
-                        }).join('')}
+                        ${tableRows}
                     </tbody>
                 </table>
             </div>
@@ -206,13 +269,25 @@
                 </div>
             </div>
         `;
-        document.getElementById('scoreSection').innerHTML = scoreHtml;
+        document.getElementById('scoreSection').innerHTML = html;
+
+        // 确保考试日期下拉框已加载
+        await loadExamList();
+
         // 绑定科目筛选事件
         const selector = document.getElementById('subjectFilterSelect');
         if (selector) {
             selector.addEventListener('change', (e) => {
                 currentSubjectFilter = e.target.value;
                 renderScoreModule();
+            });
+        }
+        // 绑定考试日期切换事件
+        const examSelector = document.getElementById('examSelect');
+        if (examSelector) {
+            examSelector.addEventListener('change', async (e) => {
+                currentExamDate = e.target.value;
+                await renderScoreModule();  // 重新加载数据并渲染
             });
         }
     }
@@ -325,8 +400,9 @@
     }
 
     // 初始化导航事件与默认页
-    function initNavigation() {
+    async function initNavigation() {
         renderHeaderInfo();
+        await refreshAllData('');  // 加载默认最新批次数据
         const navLinks = document.querySelectorAll('.sidebar-menu a');
         navLinks.forEach(link => {
             link.addEventListener('click', (e) => {

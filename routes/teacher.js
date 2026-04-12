@@ -39,8 +39,29 @@ router.get('/info',isTeacher,async(req,res)=>{
     });
 });
 
+// 获取当前本班可用的考试日期
+router.get('/exams',isTeacher,async(req,res)=>{
+    const account = req.session.account;
+    const [user] = await pool.query('SELECT id FROM users WHERE account = ?', [account]);
+    const userId = user[0].id;
+    // 获取学生班级ID
+    const [classRows] = await pool.query('SELECT id FROM classes WHERE teacher_id = ?', [userId]);
+    if (classRows.length === 0) return res.json([]);
+    const classId = classRows[0].id;
+    // 查询该班级所有不重复的考试日期，按时间倒序
+    const [rows] = await pool.query(`
+        SELECT DISTINCT exam_date 
+        FROM scores 
+        WHERE class_id = ? 
+        ORDER BY exam_date DESC
+    `, [classId]);
+    // 略去字段
+    res.json(rows.map(r => r.exam_date));
+});
+
 // 获取所有学生单科成绩
 router.get('/scores',isTeacher,async(req,res)=>{
+    const examDate = req.query.exam_date;
     const account = req.session.account;
     const [rows] = await pool.query('select id from users where account = ?',[account]);
     const userId = rows[0].id;
@@ -48,12 +69,12 @@ router.get('/scores',isTeacher,async(req,res)=>{
     const [classRows] = await pool.query('SELECT id FROM classes WHERE teacher_id = ?', [userId]);
     if (classRows.length === 0) return res.json([]);
     const classId = classRows[0].id;
-    // 获取本班最新考试日期（所有学生最新日期的最大值，保证同一考试批次）
-    const [dateRows] = await pool.query(`
-        SELECT MAX(exam_date) AS latest_date FROM scores WHERE class_id = ?
-    `, [classId]);
-    const latestDate = dateRows[0].latest_date;
-    if (!latestDate) return res.json([]);
+    let targetDate = examDate;
+    if (!targetDate) {
+        const [dateRow] = await pool.query(`SELECT MAX(exam_date) AS latest FROM scores WHERE class_id = ?`, [classId]);
+        targetDate = dateRow[0].latest;
+        if (!targetDate) return res.json([]);
+    }
     const [scores] = await pool.query(`
         SELECT 
             s.student_id AS id,
@@ -66,12 +87,13 @@ router.get('/scores',isTeacher,async(req,res)=>{
         JOIN users u ON s.student_id = u.id
         WHERE s.class_id = ? AND s.exam_date = ?
         ORDER BY s.subject, s.score DESC
-    `, [classId, latestDate]);
+    `, [classId, targetDate]);
     res.json(scores);
 });
 
 // 获取班级分数概况
 router.get('/general',isTeacher,async(req,res)=>{
+    const examDate = req.query.exam_date;
     const account = req.session.account;
     const [rows] = await pool.query('select id from users where account = ?',[account]);
     const userId = rows[0].id;
@@ -79,12 +101,12 @@ router.get('/general',isTeacher,async(req,res)=>{
     const [classRows] = await pool.query('SELECT id FROM classes WHERE teacher_id = ?', [userId]);
     if (classRows.length === 0) return res.json({ max: 0, min: 0, avg: 0 });
     const classId = classRows[0].id;
-    // 获取最新考试日期
-    const [dateRows] = await pool.query(`
-        SELECT MAX(exam_date) AS latest_date FROM scores WHERE class_id = ?
-    `, [classId]);
-    const latestDate = dateRows[0].latest_date;
-    if (!latestDate) return res.json({ max: 0, min: 0, avg: 0 });
+    let targetDate = examDate;
+    if (!targetDate) {
+        const [dateRow] = await pool.query(`SELECT MAX(exam_date) AS latest FROM scores WHERE class_id = ?`, [classId]);
+        targetDate = dateRow[0].latest;
+        if (!targetDate) return res.json({ max: 0, min: 0, avg: 0 });
+    }
     // 在该批次下计算总分概况
     const [scores] = await pool.query(`
         WITH stu_total AS (
@@ -98,24 +120,25 @@ router.get('/general',isTeacher,async(req,res)=>{
             MIN(total) AS min,
             ROUND(AVG(total), 1) AS avg
         FROM stu_total
-    `, [classId, latestDate]);
+    `, [classId, targetDate]);
     res.json(scores[0]);
 });
 
 // 获取所有学生总分
 router.get('/totalscores',isTeacher,async(req,res)=>{
+    const examDate = req.query.exam_date;
     const account = req.session.account;
     const [rows] = await pool.query('select id from users where account = ?',[account]);
     const userId = rows[0].id;
     const [classRows] = await pool.query('SELECT id FROM classes WHERE teacher_id = ?', [userId]);
     if (classRows.length === 0) return res.json([]);
     const classId = classRows[0].id;
-    // 获取本班最新考试日期
-    const [dateRows] = await pool.query(`
-        SELECT MAX(exam_date) AS latest_date FROM scores WHERE class_id = ?
-    `, [classId]);
-    const latestDate = dateRows[0].latest_date;
-    if (!latestDate) return res.json([]);
+    let targetDate = examDate;
+    if (!targetDate) {
+        const [dateRow] = await pool.query(`SELECT MAX(exam_date) AS latest FROM scores WHERE class_id = ?`, [classId]);
+        targetDate = dateRow[0].latest;
+        if (!targetDate) return res.json([]);
+    }
     const [scores] = await pool.query(`
         with stu_scores as (
             select
@@ -133,13 +156,14 @@ router.get('/totalscores',isTeacher,async(req,res)=>{
             total_score,
             rank() over (order by total_score desc) as class_rank
         from stu_scores
-    `,[classId, latestDate]);
+    `,[classId, targetDate]);
     res.json(scores);
 });
 
 
 // 获取单科成绩概况
 router.get('/subjectgeneral',isTeacher,async(req,res)=>{
+    const examDate = req.query.exam_date;
     const account = req.session.account;
     const [rows] = await pool.query('select id from users where account = ?',[account]);
     const userId = rows[0].id;
@@ -147,12 +171,12 @@ router.get('/subjectgeneral',isTeacher,async(req,res)=>{
     const [classRows] = await pool.query('SELECT id FROM classes WHERE teacher_id = ?', [userId]);
     if (classRows.length === 0) return res.json([]);
     const classId = classRows[0].id;
-    // 获取最新考试日期
-    const [dateRows] = await pool.query(`
-        SELECT MAX(exam_date) AS latest_date FROM scores WHERE class_id = ?
-    `, [classId]);
-    const latestDate = dateRows[0].latest_date;
-    if (!latestDate) return res.json([]);
+    let targetDate = examDate;
+    if (!targetDate) {
+        const [dateRow] = await pool.query(`SELECT MAX(exam_date) AS latest FROM scores WHERE class_id = ?`, [classId]);
+        targetDate = dateRow[0].latest;
+        if (!targetDate) return res.json([]);
+    }
     // 在该批次下计算单科概况
     const [scores] = await pool.query(`
         SELECT 
@@ -165,7 +189,7 @@ router.get('/subjectgeneral',isTeacher,async(req,res)=>{
         FROM scores
         WHERE class_id = ? AND exam_date = ?
         GROUP BY subject
-    `, [classId, latestDate]);
+    `, [classId, targetDate]);
     // 计算及格率
     const result = scores.map(row => ({
         subject: row.subject,

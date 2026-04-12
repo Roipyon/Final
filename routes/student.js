@@ -29,21 +29,52 @@ router.get('/info',isStudent,async(req,res)=>{
     });
 });
 
+// 获取当前学生可用的考试日期
+router.get('/exams',isStudent,async(req,res)=>{
+    const account = req.session.account;
+    const [user] = await pool.query('SELECT id FROM users WHERE account = ?', [account]);
+    const userId = user[0].id;
+    // 获取学生班级ID
+    const [classInfo] = await pool.query(`
+        SELECT class_id FROM class_members WHERE student_id = ? AND status = 1 LIMIT 1
+    `, [userId]);
+    if (classInfo.length === 0) return res.json([]);
+    const classId = classInfo[0].class_id;
+    // 查询该班级所有不重复的考试日期，按时间倒序
+    const [rows] = await pool.query(`
+        SELECT DISTINCT exam_date 
+        FROM scores 
+        WHERE class_id = ? 
+        ORDER BY exam_date DESC
+    `, [classId]);
+    // 略去字段
+    res.json(rows.map(r => r.exam_date));
+});
+
 // 获取当前学生班级和成绩信息
 router.get('/grade',isStudent,async(req,res)=>{
+    const examDate = req.query.exam_date;
     const account = req.session.account;
     const [rows] = await pool.query('select id from users where account = ?',[account]);
     const userId = rows[0].id;
+    // 获取班级ID
+    const [classInfo] = await pool.query(`
+        SELECT class_id FROM class_members WHERE student_id = ? AND status = 1 LIMIT 1
+    `, [userId]);
+    if (classInfo.length === 0) return res.json([]);
+    const classId = classInfo[0].class_id;
+    // 确定使用的考试日期
+    let targetDate = examDate;
+    // 为空返回最新
+    if (!targetDate) {
+        const [dateRow] = await pool.query(`
+            SELECT MAX(exam_date) AS latest FROM scores WHERE class_id = ?
+        `, [classId]);
+        targetDate = dateRow[0].latest;
+        if (!targetDate) return res.json([]);
+    }
     const [subjectRows] = await pool.query(`
-        WITH student_info AS (
-            SELECT 
-                cm.class_id,
-                (SELECT MAX(exam_date) FROM scores WHERE student_id = ?) AS latest_exam
-            FROM class_members cm
-            WHERE cm.student_id = ? AND cm.status = 1
-            LIMIT 1
-            ),
-        class_stats AS (
+        WITH class_stats AS (
             SELECT 
                 s.student_id,
                 s.subject,
@@ -51,9 +82,7 @@ router.get('/grade',isStudent,async(req,res)=>{
                 AVG(s.score) OVER (PARTITION BY s.subject) AS classAvg,
                 RANK() OVER (PARTITION BY s.subject ORDER BY s.score DESC) AS classRank
             FROM scores s
-            JOIN student_info si
-                ON s.class_id = si.class_id
-                AND s.exam_date = si.latest_exam
+            where s.class_id = ? and s.exam_date = ?
         )
         SELECT 
             subject,
@@ -61,34 +90,39 @@ router.get('/grade',isStudent,async(req,res)=>{
             ROUND(classAvg, 1) AS classAvg,
             classRank
         FROM class_stats
-        WHERE student_id = ?;`,[userId,userId,userId]);
+        where student_id = ?
+        `,[classId,targetDate,userId]);
     res.json(subjectRows);
 });
 
 // 获取总排名（基于学生个人最后一次考试日期）
 router.get('/totalrank',isStudent,async(req,res)=>{
+    const examDate = req.query.exam_date;
     const account = req.session.account;
     const [rows] = await pool.query('select id from users where account = ?',[account]);
     const userId = rows[0].id;
+     // 获取学生班级ID
+    const [classInfo] = await pool.query(`
+        SELECT class_id FROM class_members WHERE student_id = ? AND status = 1 LIMIT 1
+    `, [userId]);
+    if (classInfo.length === 0) return res.json({ total: 0, totalAvg: 0, totalRank: '-' });
+    const classId = classInfo[0].class_id;
+    // 为空返回最新
+    let targetDate = examDate;
+    if (!targetDate) {
+        const [dateRow] = await pool.query(`
+            SELECT MAX(exam_date) AS latest FROM scores WHERE class_id = ?
+        `, [classId]);
+        targetDate = dateRow[0].latest;
+        if (!targetDate) return res.json({ total: 0, totalAvg: 0, totalRank: '-' });
+    }
     const [result] = await pool.query(`
-        WITH student_lastest AS (
-            SELECT MAX(exam_date) AS lastest_exam
-            FROM scores
-            WHERE student_id = ?
-        ),
-        class_members_info AS (
-            SELECT class_id
-            FROM class_members
-            WHERE student_id = ? AND status = 1
-        ),
-        class_scores AS (
+        WITH class_scores AS (
             SELECT 
-                s.student_id,
-                SUM(s.score) AS total_score
+                student_id,
+                SUM(score) AS total_score
             FROM scores s
-            JOIN class_members_info cmi ON s.class_id = cmi.class_id
-            CROSS JOIN student_lastest sl
-            WHERE s.exam_date = sl.lastest_exam
+            WHERE class_id = ? and exam_date = ?
             GROUP BY s.student_id
         ),
         ranked AS (
@@ -109,49 +143,43 @@ router.get('/totalrank',isStudent,async(req,res)=>{
         FROM ranked r
         CROSS JOIN class_avg ca
         WHERE r.student_id = ?
-    `, [userId, userId, userId]);
-    res.json(result[0] || { total: 0, totalAvg: 0, totalRank: 0 });
+    `, [classId, targetDate, userId]);
+    res.json(result[0] || { total: 0, totalAvg: 0, totalRank: '-' });
 });
 
 // 班级统计数据（基于学生个人最后一次考试日期）
 router.get('/classstat',isStudent,async(req,res)=>{
+    const examDate = req.query.exam_date;
     const account = req.session.account;
     const [rows] = await pool.query('select id from users where account = ?',[account]);
     const userId = rows[0].id;
+    const [classInfo] = await pool.query(`
+        SELECT class_id FROM class_members WHERE student_id = ? AND status = 1 LIMIT 1
+    `, [userId]);
+    if (classInfo.length === 0) return res.json([]);
+    const classId = classInfo[0].class_id;
+    let targetDate = examDate;
+    if (!targetDate) {
+        const [dateRow] = await pool.query(`
+            SELECT MAX(exam_date) AS latest FROM scores WHERE class_id = ?
+        `, [classId]);
+        targetDate = dateRow[0].latest;
+        if (!targetDate) return res.json([]);
+    }
     const [classStat] = await pool.query(`
-        with student_lastest as (
-            SELECT MAX(exam_date) AS lastest_exam
-            FROM scores
-            WHERE student_id = ?
-        ),
-        class_members_info AS (
-            SELECT class_id
-            FROM class_members
-            WHERE student_id = ? AND status = 1
-        )
         SELECT
-            s.subject,
-            ROUND(AVG(s.score), 1) AS avg,
-            MAX(s.score) AS max,
-            MIN(s.score) AS min,
-            COUNT(*) AS total_count,
-            COUNT(CASE WHEN s.score >= s.full_mark * 0.6 THEN 1 END) AS pass_count
-        FROM scores s
-        JOIN class_members_info cmi ON s.class_id = cmi.class_id
-        CROSS JOIN student_lastest sl
-        WHERE s.exam_date = sl.lastest_exam
-        GROUP BY s.subject
-    `, [userId, userId]);
-    const result = classStat.map(row => ({
-        subject: row.subject,
-        avg: row.avg,
-        max: row.max,
-        min: row.min,
-        passCount: row.pass_count,
-        totalStu: row.total_count,
-        passRate: row.total_count === 0 ? '0%' : ((row.pass_count / row.total_count) * 100).toFixed(2) + '%'
-    }));
-    res.json(result);
+            subject,
+            ROUND(AVG(score), 1) AS avg,
+            MAX(score) AS max,
+            MIN(score) AS min,
+            COUNT(*) AS totalStu,
+            COUNT(CASE WHEN score >= full_mark * 0.6 THEN 1 END) AS passCount,
+            CONCAT(ROUND(COUNT(CASE WHEN score >= full_mark * 0.6 THEN 1 END) * 100.0 / COUNT(*), 2), '%') AS passRate
+        FROM scores
+        WHERE class_id = ? and exam_date = ?
+        GROUP BY subject
+    `, [classId, targetDate]);
+    res.json(classStat);
 });
 
 // 获取通知
