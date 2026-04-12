@@ -450,7 +450,7 @@ router.post('/fullmark',isAdmin,async(req,res)=>{
 
 // 添加成绩
 router.post('/scores',isAdmin,async(req,res)=>{
-    const { className, studentName, studentId, subject, score } = req.body;
+    const { className, studentName, studentId, subject, score, examDate } = req.body;
     if (!className || !studentName || !studentId || !subject || score === undefined) {
         return res.status(400).json({ success: false, message: '参数不完整' });
     }
@@ -499,7 +499,13 @@ router.post('/scores',isAdmin,async(req,res)=>{
             return res.status(400).json({ success: false, message: '该学生不在指定班级中，请先通过班级管理添加学生' });
         }
 
-        const examDate = new Date().toISOString().slice(0, 10);
+        // 确定考试日期：优先使用传入的 examDate，否则使用当天
+        let finalExamDate = examDate ? examDate : new Date().toISOString().slice(0, 10);
+        // 简单校验格式 YYYY-MM-DD
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(finalExamDate)) {
+            finalExamDate = new Date().toISOString().slice(0, 10);
+        }
+        
         await pool.query(
             `INSERT INTO scores (student_id, class_id, subject, score, exam_date, full_mark)
             VALUES (?, ?, ?, ?, ?, ?)`,

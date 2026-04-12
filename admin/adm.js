@@ -11,6 +11,11 @@
     let currentEditScoreId = null;
     let currentEditClassId = null;
     let currentAddStudentClassId = null;
+    // 排序相关状态
+    let currentSortField = 'className';    // 默认按班级排序（选择具体批次时）
+    let currentSortOrder = 'asc';          // 班级排序通常升序（一班在前）
+    // 搜索关键词
+    let currentSearchKeyword = '';
     const logsPerPage = 15;
 
     // 用户信息
@@ -505,7 +510,138 @@
         }
     }
 
+    /**
+     * 根据当前科目模式和是否选择了考试批次，返回可用的排序字段选项
+     * @param {boolean} isTotal - 是否为总分模式
+     * @param {boolean} hasExamDate - 是否选择了具体考试批次
+     * @returns {Array<{value: string, label: string}>}
+     */
+    function getAvailableSortFields(isTotal, hasExamDate) {
+        let fields = [];
+        
+        // 基础字段：分数排序（永远可用）
+        fields.push({ value: isTotal ? 'totalScore' : 'subjectScore', label: isTotal ? '总分' : '单科成绩' });
+        
+        // 班级排序（永远可用，跨班查看时非常有意义）
+        fields.push({ value: 'className', label: '班级' });
+        
+        // 学号排序（永远可用，便于定位学生）
+        fields.push({ value: 'studentId', label: '学号' });
+        
+        // 姓名排序（新增，方便按姓名查找）
+        fields.push({ value: 'studentName', label: '姓名' });
+        
+        // 仅当选择了具体批次时，才提供排名相关字段（排名数据才有效）
+        if (hasExamDate) {
+            if (isTotal) {
+                // 总分模式下，年级排名实际上与总分降序结果一致，但保留以显示排名数值；班级排名跨班混合意义不大，但为完整性保留，用户可选
+                fields.push({ value: 'totalGradeRank', label: '总分年级排名' });
+                // 班级排名：跨班时按班级排名排序结果混乱，建议仅当筛选了单个班级时才有意义，但用户可自行选择，暂保留
+                fields.push({ value: 'totalClassRank', label: '总分班级排名' });
+            } else {
+                fields.push({ value: 'subjectGradeRank', label: '单科年级排名' });
+                fields.push({ value: 'subjectClassRank', label: '单科班级排名' });
+            }
+        }
+        
+        return fields;
+    }
+
+    /**
+     * 对展示数据应用排序
+     * @param {Array} data - 原始数据数组
+     * @param {boolean} isTotal - 是否总分模式
+     * @param {string} field - 排序字段标识
+     * @param {string} order - 'asc' 或 'desc'
+     * @returns {Array} 排序后的新数组
+     */
+    function applySorting(data, isTotal, field, order) {
+        if (!data.length) return data;
+        
+        return [...data].sort((a, b) => {
+            let valA, valB;
+            
+            // 根据字段取值
+            switch (field) {
+                case 'totalScore':
+                case 'subjectScore':
+                    valA = a.score || 0;
+                    valB = b.score || 0;
+                    break;
+                case 'className':
+                    // 班级排序：先比较班级名称，再按分数降序（作为二级排序）
+                    const classNameCompare = (a.className || '').localeCompare(b.className || '', 'zh-CN');
+                    if (classNameCompare !== 0) {
+                        return order === 'asc' ? classNameCompare : -classNameCompare;
+                    }
+                    // 同班级内按分数降序（固定二级排序，不受主排序方向影响）
+                    return (b.score || 0) - (a.score || 0);
+                case 'studentId':
+                    valA = a.studentId || '';
+                    valB = b.studentId || '';
+                    break;
+                case 'studentName':
+                    valA = a.studentName || '';
+                    valB = b.studentName || '';
+                    break;
+                case 'totalGradeRank':
+                    valA = a.classRank || 9999;
+                    valB = b.classRank || 9999;
+                    break;
+                case 'totalClassRank':
+                    valA = a.classRankInClass || 9999;
+                    valB = b.classRankInClass || 9999;
+                    break;
+                case 'subjectGradeRank':
+                    valA = a.grade_rank_subject || 9999;
+                    valB = b.grade_rank_subject || 9999;
+                    break;
+                case 'subjectClassRank':
+                    valA = a.class_rank_subject || 9999;
+                    valB = b.class_rank_subject || 9999;
+                    break;
+                default:
+                    return 0;
+            }
+            
+            // 如果上面已经处理了班级多级排序（className 分支直接返回），则不会执行到这里
+            // 对于其他字段，进行常规比较
+            if (typeof valA === 'string') {
+                const compareResult = valA.localeCompare(valB, 'zh-CN');
+                return order === 'asc' ? compareResult : -compareResult;
+            } else {
+                return order === 'asc' ? valA - valB : valB - valA;
+            }
+        });
+    }
+
+    /**
+     * 根据搜索关键词过滤数据（安全类型转换）
+     * @param {Array} data - 原始数据数组
+     * @param {string} keyword - 搜索关键词（不区分大小写）
+     * @param {boolean} isTotal - 是否总分模式（用于判断可搜索字段）
+     * @returns {Array} 过滤后的数组
+     */
+    function applySearchFilter(data, keyword, isTotal) {
+        if (!keyword.trim()) return data;
+        
+        const lowerKeyword = keyword.trim().toLowerCase();
+        return data.filter(item => {
+            // 强制转换为字符串，避免数字类型调用 .toLowerCase() 报错
+            const className = String(item.className || '').toLowerCase();
+            const studentName = String(item.studentName || '').toLowerCase();
+            const studentId = String(item.studentId || '').toLowerCase();
+            const subject = isTotal ? '' : String(globalSubjectFilter || '').toLowerCase();
+            
+            return className.includes(lowerKeyword) ||
+                studentName.includes(lowerKeyword) ||
+                studentId.includes(lowerKeyword) ||
+                (subject && subject.includes(lowerKeyword));
+        });
+    }
+
     // 全量成绩管理
+    // ---------- 成绩管理（包含批次列、排序、搜索）----------
     async function renderScoreAll() {
         // 总分必须在具体批次下查看，若当前为总分且未选批次，自动切回默认科目
         if (globalSubjectFilter === '总分' && !currentExamDate) {
@@ -521,29 +657,42 @@
             await refreshScoresData();
         }
 
-        // 准备展示数据
-        let displayData = [];
+        // 基础状态
         let isTotal = (globalSubjectFilter === '总分');
-        let hasExamDate = !!currentExamDate;  // 是否选择了具体批次，用于控制排名列显示
+        let hasExamDate = !!currentExamDate;  // 是否选择了具体批次，影响排名显示及批次列显示
 
+        // ---------- 数据处理 ----------
+        // 1. 班级筛选
+        let displayData = [];
         if (isTotal) {
-            let filteredTotal = scoresTotal;
-            if (globalClassFilter !== '所有班级') {
-                filteredTotal = scoresTotal.filter(s => s.className === globalClassFilter);
-            }
-            displayData = filteredTotal;
+            displayData = scoresTotal.filter(s => globalClassFilter === '所有班级' || s.className === globalClassFilter);
         } else {
-            let filtered = allScores.filter(s => s.subject === globalSubjectFilter);
-            if (globalClassFilter !== '所有班级') {
-                filtered = filtered.filter(s => s.className === globalClassFilter);
-            }
-            displayData = filtered;
+            displayData = allScores.filter(s => 
+                s.subject === globalSubjectFilter &&
+                (globalClassFilter === '所有班级' || s.className === globalClassFilter)
+            );
         }
 
-        // 计算统计值
+        // 2. 模糊搜索过滤
+        displayData = applySearchFilter(displayData, currentSearchKeyword, isTotal);
+
+        // 3. 计算统计数据（基于过滤后的数据）
         const stats = computeStats(displayData);
 
-        // 根据是否为总分生成不同的统计卡片
+        // 4. 获取可用排序字段，并确保当前排序字段有效
+        const sortOptions = getAvailableSortFields(isTotal, hasExamDate);
+        if (!sortOptions.some(opt => opt.value === currentSortField)) {
+            // 如果当前排序字段不可用（例如批次被清空后排名字段失效），重置为默认（班级）
+            currentSortField = 'className';
+            currentSortOrder = 'asc';
+        }
+        // 若用户未明确设置过排序，且选择了具体批次，则默认按班级排序（已在初始化时设置为 className）
+        
+        // 5. 应用排序
+        displayData = applySorting(displayData, isTotal, currentSortField, currentSortOrder);
+
+        // ---------- 构建UI组件 ----------
+        // 统计卡片（与之前相同，略作调整以保证代码完整）
         const statsHtml = isTotal ? `
             <div class="stats-grid" style="margin-bottom:16px;">
                 <div class="stat-card"><div class="stat-value">${stats.avg}</div><div>平均分</div></div>
@@ -560,11 +709,14 @@
             </div>
         `;
 
-        // 动态生成表头（排名列仅在选择了具体批次时显示）
+        // 动态表头：根据是否有批次决定是否显示“考试批次”列
+        const examDateHeader = hasExamDate ? '' : '<th>考试批次</th>';
+        
         const tableHeader = isTotal ? `
             <thead>
                 <tr>
                     <th>姓名</th><th>学号</th>
+                    ${examDateHeader}
                     <th>总分</th>
                     ${hasExamDate ? `<th>总分排名</th><th>班级排名</th>` : ''}
                     <th>操作</th>
@@ -574,6 +726,7 @@
             <thead>
                 <tr>
                     <th>班级</th><th>姓名</th><th>学号</th>
+                    ${examDateHeader}
                     <th>科目</th><th>成绩</th>
                     ${hasExamDate ? `<th>年级排名</th><th>班级排名</th>` : ''}
                     <th>操作</th>
@@ -581,12 +734,17 @@
             </thead>
         `;
 
-        // 动态生成表格行
-        const tableRows = displayData.map((s) => `
+        // 表格行生成
+        const tableRows = displayData.map((s) => {
+            // 格式化考试批次显示（仅当无批次筛选时展示）
+            const examDateDisplay = hasExamDate ? '' : `<td>${s.exam_date ? new Date(s.exam_date).toLocaleDateString() : '—'}</td>`;
+            
+            return `
             <tr>
                 ${isTotal ? '' : `<td>${escapeHtml(s.className || '')}</td>`}
                 <td>${escapeHtml(s.studentName || '')}</td>
                 <td>${escapeHtml(s.studentId || '')}</td>
+                ${examDateDisplay}
                 ${isTotal ? '' : `<td>${escapeHtml(globalSubjectFilter)}</td>`}
                 <td>${s.score}</td>
                 ${isTotal ? `
@@ -607,61 +765,206 @@
                     `}
                 </td>
             </tr>
-        `).join('');
+        `}).join('');
 
         // 科目下拉选项
         const subjectOptions = allSubjects.map(sub =>
             `<option value="${sub}" ${globalSubjectFilter === sub ? 'selected' : ''}>${sub}</option>`
         ).join('');
 
-        // 组装页面
+        // 排序字段下拉选项 HTML
+        const sortFieldOptionsHtml = sortOptions.map(opt =>
+            `<option value="${opt.value}" ${currentSortField === opt.value ? 'selected' : ''}>${opt.label}</option>`
+        ).join('');
+
+        // 组装整个页面 HTML（新增搜索框和排序控件）
         const html = `
             <h3>全量成绩管理 (跨班级)</h3>
-            <div class="filter-bar">
+            <div class="filter-bar" style="display:flex; flex-wrap:wrap; align-items:center; gap:8px;">
                 <select id="examSelect" class="filter-select"><option value="">加载中...</option></select>
                 <select id="classFilterAll" class="filter-select">${getClassOptions()}</select>
                 <select id="subjectFilterAll" class="filter-select">${subjectOptions}</select>
+                <input type="text" id="searchInput" class="filter-select" placeholder="搜索班级/姓名/学号/科目" value="${escapeHtml(currentSearchKeyword)}" style="width:180px;">
+                <button id="searchBtn" class="btn-sm" title="执行搜索">搜索</button>
+                <div class="sort-controls" style="display:flex; align-items:center; gap:4px; margin-left:auto;">
+                    <select id="sortFieldSelect" class="filter-select" style="width:auto;">${sortFieldOptionsHtml}</select>
+                    <button id="toggleSortOrderBtn" class="btn-sm" title="切换排序方向">${currentSortOrder === 'asc' ? '↑' : '↓'}</button>
+                </div>
                 <button id="addScoreAllBtn" class="btn-primary btn-sm">+ 添加成绩</button>
-                <button id="batchImportAllBtn" class="btn-sm">批量导入(模拟)</button>
+                <button id="batchImportAllBtn" class="btn-sm">批量导入</button>
                 <button id="exportAllBtn" class="btn-sm">导出CSV</button>
+                <button id="downloadTemplateBtn" class="btn-sm">下载模板</button>
             </div>
             ${statsHtml}
             <table class="table">
                 ${tableHeader}
-                <tbody>${tableRows || '<tr><td colspan="6">暂无数据</td></tr>'}</tbody>
+                <tbody>${tableRows || '<tr><td colspan="8">暂无数据</td></tr>'}</tbody>
             </table>
         `;
         document.getElementById('scoreAllSection').innerHTML = html;
 
-        // 加载考试日期下拉框（并设置默认值）
+        // ---------- 事件绑定 ----------
         await loadExamList();
-        // 确保筛选器显示当前值
-        const classFilterSelect = document.getElementById('classFilterAll');
-        if (classFilterSelect) classFilterSelect.value = globalClassFilter;
-        const examSelect = document.getElementById('examSelect');
-        if (examSelect) examSelect.value = currentExamDate || '';
-
+        
+        // 设置下拉框当前值
+        document.getElementById('classFilterAll').value = globalClassFilter;
+        document.getElementById('examSelect').value = currentExamDate || '';
+        
         // 绑定筛选事件
-        document.getElementById('classFilterAll')?.addEventListener('change', (e) => {
+        document.getElementById('classFilterAll').addEventListener('change', (e) => {
             globalClassFilter = e.target.value;
             renderScoreAll();
         });
-        document.getElementById('subjectFilterAll')?.addEventListener('change', (e) => {
+        document.getElementById('subjectFilterAll').addEventListener('change', (e) => {
             globalSubjectFilter = e.target.value;
             renderScoreAll();
         });
-        document.getElementById('examSelect')?.addEventListener('change', async (e) => {
+        document.getElementById('examSelect').addEventListener('change', async (e) => {
             currentExamDate = e.target.value;
+            // 切换批次后，重置排序字段为班级（符合默认要求）
+            currentSortField = 'className';
+            currentSortOrder = 'asc';
             await renderScoreAll();
         });
 
-        // 绑定按钮事件
-        document.getElementById('addScoreAllBtn')?.addEventListener('click', () => openAddScoreModal());
-        document.getElementById('batchImportAllBtn')?.addEventListener('click', () => alert("模拟批量导入成绩功能"));
-        document.getElementById('exportAllBtn')?.addEventListener('click', () => exportScoreCSV());
+        // 绑定搜索按钮点击事件
+        const searchBtn = document.getElementById('searchBtn');
+        const searchInput = document.getElementById('searchInput');
+        if (searchBtn && searchInput) {
+            const performSearch = () => {
+                currentSearchKeyword = searchInput.value;
+                renderScoreAll();
+            };
+            searchBtn.addEventListener('click', performSearch);
+            // 回车触发搜索
+            searchInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault(); // 防止可能的表单提交
+                    performSearch();
+                }
+            });
+        }
+        
+        // 绑定排序字段下拉
+        document.getElementById('sortFieldSelect').addEventListener('change', (e) => {
+            currentSortField = e.target.value;
+            // 根据字段类型自动设置合理的默认排序方向
+            if (currentSortField.includes('Rank') || currentSortField === 'className' || currentSortField === 'studentId' || currentSortField === 'studentName') {
+                currentSortOrder = 'asc';   // 排名、班级、学号、姓名通常升序
+            } else {
+                currentSortOrder = 'desc';  // 分数类默认降序
+            }
+            renderScoreAll();
+        });
+        
+        // 绑定排序方向切换
+        document.getElementById('toggleSortOrderBtn').addEventListener('click', () => {
+            currentSortOrder = currentSortOrder === 'asc' ? 'desc' : 'asc';
+            renderScoreAll();
+        });
+        
+        // 其他按钮事件
+        document.getElementById('addScoreAllBtn').addEventListener('click', () => openAddScoreModal());
+        document.getElementById('exportAllBtn').addEventListener('click', () => exportScoreCSV(displayData, isTotal, hasExamDate));
 
-        // 绑定编辑和删除按钮
+        document.getElementById('batchImportAllBtn').addEventListener('click', () => {
+            // 创建文件选择 input
+            const fileInput = document.createElement('input');
+            fileInput.type = 'file';
+            fileInput.accept = '.csv';
+            fileInput.onchange = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    const csv = ev.target.result;
+                    importFromCSV(csv);
+                };
+                reader.readAsText(file, 'UTF-8');
+            };
+            fileInput.click();
+        });
+
+        document.getElementById('downloadTemplateBtn').addEventListener('click', () => {
+            const csv = '班级,姓名,学号,科目,成绩,考试日期(可选)\n高一1班,张三,2024001,数学,85,2026-04-12';
+            const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = '成绩导入模板.csv';
+            a.click();
+            URL.revokeObjectURL(url);
+        });
+                
+        // 绑定编辑/删除按钮
         bindScoreActions();
+    }
+
+    async function importFromCSV(csvText) {
+        const lines = csvText.trim().split('\n');
+        if (lines.length < 2) {
+            alert('CSV 至少需要表头和一行数据');
+            return;
+        }
+        
+        // 解析表头（简单按逗号分割）
+        const headers = lines[0].split(',').map(h => h.trim());
+        const classIdx = headers.indexOf('班级');
+        const nameIdx = headers.indexOf('姓名');
+        const idIdx = headers.indexOf('学号');
+        const subjectIdx = headers.indexOf('科目');
+        const scoreIdx = headers.indexOf('成绩');
+        const dateIdx = headers.indexOf('考试日期'); // 可选
+        
+        if (classIdx === -1 || nameIdx === -1 || idIdx === -1 || subjectIdx === -1 || scoreIdx === -1) {
+            alert('CSV 表头必须包含：班级,姓名,学号,科目,成绩');
+            return;
+        }
+        
+        let successCount = 0;
+        let failCount = 0;
+        
+        for (let i = 1; i < lines.length; i++) {
+            const line = lines[i].trim();
+            if (!line) continue;
+            
+            const cols = line.split(',').map(c => c.trim());
+            const className = cols[classIdx] || '';
+            const studentName = cols[nameIdx] || '';
+            const studentId = cols[idIdx] || '';
+            const subject = cols[subjectIdx] || '';
+            const score = parseFloat(cols[scoreIdx]);
+            const examDate = cols[dateIdx] || currentExamDate || '';
+            
+            if (!className || !studentName || !studentId || !subject || isNaN(score)) {
+                failCount++;
+                continue;
+            }
+            
+            // 复用现有的添加成绩逻辑（直接调用后端单条接口）
+            try {
+                const res = await fetch('/admin/scores', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ className, studentName, studentId, subject, score, examDate })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    successCount++;
+                } else {
+                    failCount++;
+                }
+            } catch (err) {
+                failCount++;
+            }
+        }
+        
+        alert(`导入完成：成功 ${successCount} 条，失败 ${failCount} 条。`);
+        // 刷新成绩列表
+        await refreshScoresData();
+        if (globalSubjectFilter === '总分') await refreshTotalScoresData();
+        renderScoreAll();
     }
 
     function bindScoreActions() {
@@ -715,6 +1018,16 @@
         allSubjects.forEach(sub => {
             if (sub !== '总分') datalist.innerHTML += `<option value="${escapeHtml(sub)}">`;
         });
+        // 填充考试批次下拉（从 examList 获取）
+        const examSelect = document.getElementById('addScoreExamDate');
+        examSelect.innerHTML = '<option value="">默认(当天)</option>';
+        examList.forEach(dateStr => {
+            examSelect.innerHTML += `<option value="${dateStr}">${dateStr}</option>`;
+        });
+        // 如果当前有选中的考试批次，则默认选中（方便快速添加同批次成绩）
+        if (currentExamDate) {
+            examSelect.value = currentExamDate;
+        }
         document.getElementById('addScoreSubject').value = '';
         document.getElementById('addScoreStudentName').value = '';
         document.getElementById('addScoreStudentId').value = '';
@@ -729,6 +1042,7 @@
         const studentId = document.getElementById('addScoreStudentId').value.trim();
         let subject = document.getElementById('addScoreSubject').value.trim();
         const score = parseFloat(Number(document.getElementById('addScoreValue').value).toFixed(1));
+        const examDate = document.getElementById('addScoreExamDate').value;  // 获取选中的考试批次
 
         if (!className || !studentName || !studentId || !subject) {
             alert("请填写完整信息（班级、姓名、学号、科目）");
@@ -753,17 +1067,22 @@
         const res = await fetch('/admin/scores', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ className, studentName, studentId, subject, score })
+            body: JSON.stringify({ 
+                className, 
+                studentName, 
+                studentId, 
+                subject, 
+                score, 
+                examDate: examDate || undefined  
+            })
         });
         const data = await res.json();
         if (data.success) {
             alert("添加成功");
             closeModal('addScoreModal');
-            // 重新加载成绩数据
-            const response = await fetch('/admin/scores');
-            allScores = await response.json();
-            allScores = normalizeScores(allScores); 
-            refreshAllSubjects();
+            // 刷新数据
+            await refreshScoresData();
+            if (globalSubjectFilter === '总分') await refreshTotalScoresData();
             renderScoreAll();
             renderDashboard();
         } else {
@@ -817,9 +1136,97 @@
         }
     }
 
-    function exportScoreCSV() {
-        // 根据当前科目导出CSV，可参考教师端实现
-        alert("导出功能暂未实现，可后续添加");
+    /**
+     * 导出当前成绩数据为 CSV 文件
+     * @param {Array} data - 已过滤、排序后的展示数据
+     * @param {boolean} isTotal - 是否为总分模式
+     * @param {boolean} hasExamDate - 是否选择了具体考试批次
+     */
+    function exportScoreCSV(data, isTotal, hasExamDate) {
+        if (!data || data.length === 0) {
+            alert('没有数据可导出');
+            return;
+        }
+
+        // 1. 构建表头（与表格显示一致）
+        const headers = [];
+        if (!isTotal) {
+            headers.push('班级');
+        }
+        headers.push('姓名', '学号');
+        if (!hasExamDate) {
+            headers.push('考试批次');
+        }
+        if (!isTotal) {
+            headers.push('科目');
+        }
+        headers.push(isTotal ? '总分' : '成绩');
+        
+        if (hasExamDate) {
+            if (isTotal) {
+                headers.push('总分排名', '班级排名');
+            } else {
+                headers.push('年级排名', '班级排名');
+            }
+        }
+
+        // 2. 转换数据为 CSV 行
+        const rows = data.map(item => {
+            const row = [];
+            
+            if (!isTotal) {
+                row.push(item.className || '');
+            }
+            row.push(item.studentName || '');
+            row.push(item.studentId || '');
+            
+            if (!hasExamDate) {
+                // 格式化考试日期
+                const examDate = item.exam_date ? new Date(item.exam_date).toLocaleDateString() : '';
+                row.push(examDate);
+            }
+            
+            if (!isTotal) {
+                row.push(globalSubjectFilter);  // 当前科目名称
+            }
+            
+            row.push(item.score);
+            
+            if (hasExamDate) {
+                if (isTotal) {
+                    row.push(item.classRank || '');
+                    row.push(item.classRankInClass || '');
+                } else {
+                    row.push(item.grade_rank_subject || '');
+                    row.push(item.classr_rank_subject || '');
+                }
+            }
+            
+            // 处理可能包含逗号、换行符的字段（用双引号包裹）
+            return row.map(cell => {
+                if (typeof cell === 'string' && (cell.includes(',') || cell.includes('\n') || cell.includes('"'))) {
+                    return `"${cell.replace(/"/g, '""')}"`;
+                }
+                return cell;
+            }).join(',');
+        });
+
+        // 3. 组合 CSV 内容
+        const csvContent = [headers.join(','), ...rows].join('\n');
+        
+        // 4. 添加 BOM 并下载
+        const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        
+        // 生成文件名（包含科目、批次信息）
+        const subjectPart = isTotal ? '总分' : globalSubjectFilter;
+        const datePart = hasExamDate ? currentExamDate : '所有批次';
+        a.download = `成绩_${subjectPart}_${datePart}.csv`;
+        
+        a.click();
+        URL.revokeObjectURL(url);
     }
 
     // ---------- 全量通知 ----------

@@ -392,3 +392,209 @@ hr {
     border: 1px solid var(--border);
     border-radius: 8px;
 }
+
+.filter-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+.sort-controls {
+    margin-left: auto; /* 将排序控件推到右侧 */
+}
+
+/* ---------- 批量导入模态框专用样式 ---------- */
+
+/* 文件上传区域（可点击选择文件） */
+.file-upload-area {
+    border: 2px dashed var(--border);
+    border-radius: 8px;
+    padding: 24px;
+    text-align: center;
+    background: var(--gray-light);
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    margin-bottom: 16px;
+}
+
+.file-upload-area:hover {
+    border-color: var(--primary);
+    background: #eef2ff;
+}
+
+.file-upload-area.dragover {
+    border-color: var(--primary);
+    background: #e0e7ff;
+}
+
+.file-upload-area .upload-icon {
+    font-size: 32px;
+    color: var(--gray);
+    margin-bottom: 8px;
+}
+
+.file-upload-area .upload-text {
+    color: var(--gray-dark);
+    font-size: 14px;
+}
+
+.file-upload-area .upload-hint {
+    color: var(--gray);
+    font-size: 12px;
+    margin-top: 4px;
+}
+
+/* 隐藏的原生 file input */
+#batchImportFileInput {
+    display: none;
+}
+
+/* 预览表格容器（带滚动条） */
+.preview-table-wrapper {
+    max-height: 280px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    margin: 16px 0;
+}
+
+.preview-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    background: white;
+}
+
+.preview-table th {
+    background: var(--gray-light);
+    padding: 10px 8px;
+    font-weight: 600;
+    color: var(--gray-dark);
+    border-bottom: 2px solid var(--border);
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+
+.preview-table td {
+    padding: 8px;
+    border-bottom: 1px solid var(--border-light);
+}
+
+.preview-table tr:last-child td {
+    border-bottom: none;
+}
+
+/* 错误行高亮 */
+.preview-table .error-row {
+    background: #fee2e2;
+}
+
+.preview-table .error-row td {
+    color: #b91c1c;
+}
+
+/* 错误信息提示区 */
+.import-error-summary {
+    background: #fef2f2;
+    border-left: 4px solid #ef4444;
+    padding: 12px 16px;
+    border-radius: 4px;
+    margin: 16px 0;
+    max-height: 150px;
+    overflow-y: auto;
+}
+
+.import-error-summary .error-title {
+    font-weight: 600;
+    color: #b91c1c;
+    margin-bottom: 8px;
+}
+
+.import-error-item {
+    font-size: 13px;
+    color: #7f1d1d;
+    margin-bottom: 4px;
+}
+
+/* 导入进度条（可选，用于大文件异步处理） */
+.import-progress {
+    margin: 16px 0;
+}
+
+.import-progress-bar {
+    height: 8px;
+    background: var(--gray-light);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.import-progress-fill {
+    height: 100%;
+    background: var(--primary);
+    width: 0%;
+    transition: width 0.3s;
+}
+
+/* 导入结果统计卡片 */
+.import-result-stats {
+    display: flex;
+    gap: 16px;
+    margin: 16px 0;
+}
+
+.import-stat {
+    flex: 1;
+    text-align: center;
+    padding: 12px;
+    border-radius: 8px;
+    background: var(--gray-light);
+}
+
+.import-stat .stat-number {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--primary);
+}
+
+.import-stat .stat-label {
+    font-size: 13px;
+    color: var(--gray-dark);
+}
+
+.import-stat.success .stat-number {
+    color: #10b981;
+}
+
+.import-stat.failed .stat-number {
+    color: #ef4444;
+}
+
+/* 下载错误报告链接 */
+.download-error-link {
+    display: inline-block;
+    margin-top: 8px;
+    color: var(--primary);
+    text-decoration: none;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.download-error-link:hover {
+    text-decoration: underline;
+}
+
+/* 导入模态框宽度调整（比普通模态框稍宽） */
+#importModal .modal-container {
+    max-width: 700px;
+    width: 90%;
+}
+
+/* 操作按钮组 */
+.import-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    margin-top: 20px;
+}

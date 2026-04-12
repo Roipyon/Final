@@ -127,6 +127,10 @@
                     <datalist id="subjectOptions"></datalist>
                 </div>
                 <div class="form-group">
+                    <label>考试批次</label>
+                    <select id="addScoreExamDate" class="filter-select"></select>
+                </div>
+                <div class="form-group">
                     <label>成绩</label>
                     <input type="number" id="addScoreValue" placeholder="0-100" step="1">
                 </div>
@@ -155,6 +159,56 @@
                 <div class="flex-btns">
                     <button class="btn-default" id="cancelEditScoreAdminBtn">取消</button>
                     <button class="btn-primary" id="confirmEditScoreAdminBtn">保存</button>
+                </div>
+            </div>
+        </div>
+        <!-- 批量导入模态框 -->
+        <div id="batchImportModal" class="modal-mask" style="display:none;">
+            <div class="modal-container">
+                <h3>批量导入成绩</h3>
+                
+                <!-- 考试批次选择 -->
+                <div class="form-group">
+                    <label>考试批次</label>
+                    <select id="importExamDate" class="filter-select"></select>
+                </div>
+                
+                <!-- 文件上传区域 -->
+                <div class="file-upload-area" id="fileUploadArea">
+                    <div class="upload-icon">📄</div>
+                    <div class="upload-text">点击或拖拽 CSV 文件到此区域</div>
+                    <div class="upload-hint">支持 .csv 格式，文件大小不超过 5MB</div>
+                </div>
+                <input type="file" id="batchImportFileInput" accept=".csv,text/csv">
+                
+                <!-- 预览表格（初始隐藏） -->
+                <div id="previewContainer" style="display:none;">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+                        <span><strong>数据预览</strong> (前5行)</span>
+                        <span id="rowCountInfo"></span>
+                    </div>
+                    <div class="preview-table-wrapper">
+                        <table class="preview-table" id="previewTable">
+                            <thead><tr><th>班级</th><th>姓名</th><th>学号</th><th>科目</th><th>成绩</th></tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                <!-- 错误汇总（初始隐藏） -->
+                <div id="importErrorSummary" class="import-error-summary" style="display:none;"></div>
+                
+                <!-- 导入结果统计（初始隐藏） -->
+                <div id="importResultStats" class="import-result-stats" style="display:none;"></div>
+                
+                <!-- 下载模板链接 -->
+                <div style="margin-top:12px;">
+                    <a id="downloadTemplateLink" class="download-error-link">📥 下载导入模板 (CSV)</a>
+                </div>
+                
+                <div class="import-actions">
+                    <button class="btn-default" id="cancelImportBtn">取消</button>
+                    <button class="btn-primary" id="confirmImportBtn" disabled>确认导入</button>
                 </div>
             </div>
         </div>
