@@ -8,13 +8,14 @@ const API = {
                 return;
             }
             if (!res.ok) {
-                const errText = await res.text();
+                const errJson = await res.json();
+                const errText = errJson.message;
                 throw new Error(`请求失败 ${res.status}: ${errText}`);
             }
             return await res.json();
         } catch (err) {
             console.error('API Error:', err);
-            alert('操作失败，请稍后重试');
+            // alert('操作失败，请稍后重试');
             throw err;
         }
     },

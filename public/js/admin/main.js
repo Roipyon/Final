@@ -3,6 +3,7 @@
 import { AdminState, filterScores, sortScores, getAvailableSortFields } from './state.js';
 import { AdminRender } from './render.js';
 import { NoticeCard } from '../common/components/NoticeCard.js';
+import { Modal } from '../common//components/Modal.js';
 
 let currentSection = 'dashboard';
 
@@ -177,12 +178,12 @@ async function renderDashboard() {
 async function renderClassManage() {
     const section = document.getElementById('classManageSection');
     section.innerHTML = AdminRender.classManageSkeleton();
-    // 刷新班级数据
-    const classes = await API.admin.getClasses();
-    AdminState.classes = classes;
-    
-    // 获取每个班级的学生
-    for (let c of AdminState.classes) {
+    // 刷新班级数据，使用局部变量避免全局状态干扰
+    const freshClasses = await API.admin.getClasses();
+    AdminState.classes = freshClasses;
+
+    // 获取每个班级的学生（基于 freshClasses）
+    for (let c of freshClasses) {
         try {
             const students = await API.request(`/admin/classes/${c.id}/students`);
             c.students = Array.isArray(students) ? students : [];
@@ -263,16 +264,16 @@ async function renderClassManage() {
                 await API.admin.bindTeacher(classId, teacherId);
                 renderClassManage();
             } catch (err) {
-                alert(err.message || '绑定失败');
+                Modal.alert(err.message || '绑定失败');
 }
         });
     });
     
     document.querySelectorAll('.delete-class-btn').forEach(btn => {
         btn.addEventListener('click', async () => {
-            if (confirm('确定删除该班级吗？所有学生关联将被移除。')) {
+            if (await Modal.confirm('确定删除该班级吗？所有学生关联将被移除。')) {
                 await API.admin.deleteClass(btn.dataset.id);
-                renderClassManage();
+                await renderClassManage();
                 renderDashboard();
             }
         });
@@ -302,7 +303,7 @@ async function renderClassManage() {
     
     document.querySelectorAll('.delete-student-btn').forEach(btn => {
         btn.addEventListener('click', async () => {
-            if (confirm('确定删除该学生吗？')) {
+            if (await Modal.confirm('确定删除该学生吗？')) {
                 await API.admin.deleteStudent(btn.dataset.classId, btn.dataset.studentId);
                 renderClassManage();
             }
@@ -432,7 +433,7 @@ async function switchSection(sectionId) {
 // ---------- 全局事件绑定 ----------
 function bindGlobalEvents() {
     // 导航链接点击
-    document.addEventListener('click', (e) => {
+    document.addEventListener('click', async(e) => {
         // 侧边栏和页面内导航
         if (e.target.matches('.sidebar-menu a, .nav-link')) {
             e.preventDefault();
@@ -456,7 +457,7 @@ function bindGlobalEvents() {
                 document.getElementById('editScoreValue').value = e.target.dataset.score;
                 document.getElementById('editScoreAdminModal').style.display = 'flex';
             } else if (e.target.classList.contains('delete-score-btn')) {
-                if (confirm('确定删除？')) {
+                if (await Modal.confirm('确定删除？')) {
                     API.admin.deleteScore(e.target.dataset.id).then(() => renderScoreAll());
                 }
             } else if (e.target.id === 'exportAllBtn') {
@@ -584,11 +585,11 @@ async function confirmAddScore() {
     const examDate = document.getElementById('addScoreExamDate').value;
 
     if (!className || !studentName || !studentId || !subject) {
-        alert('请完整填写');
+        Modal.alert('请完整填写');
         return;
     }
     if (subject === '总分') {
-        alert('总分由系统自动计算，不可手动添加');
+        Modal.alert('总分由系统自动计算，不可手动添加');
         return;
     }
     // 满分校验
@@ -600,7 +601,7 @@ async function confirmAddScore() {
         });
         const fullMark = fullRes.full_mark || 100;
         if (isNaN(score) || score < 0 || score > fullMark) {
-            alert(`成绩必须在 0-${fullMark} 之间`);
+            Modal.alert(`成绩必须在 0-${fullMark} 之间`);
             return;
         }
     } catch (e) { /* 降级处理 */ }
@@ -617,12 +618,12 @@ async function confirmEditScore() {
     
     const scoreItem = AdminState.allScores.find(s => s.id === id);
     if (!scoreItem) {
-        alert("成绩记录不存在");
+        Modal.alert("成绩记录不存在");
         return;
     }
     
     if (scoreItem.subject === '总分') {
-        alert("总分由系统自动计算，不可手动修改");
+        Modal.alert("总分由系统自动计算，不可手动修改");
         closeModal('editScoreAdminModal');
         return;
     }
@@ -635,7 +636,7 @@ async function confirmEditScore() {
         });
         const fullMark = fullRes.full_mark || 100;
         if (isNaN(newScore) || newScore < 0 || newScore > fullMark) {
-            alert(`请输入有效的成绩 (0-${fullMark})`);
+            Modal.alert(`请输入有效的成绩 (0-${fullMark})`);
             return;
         }
     } catch (e) {
@@ -645,7 +646,7 @@ async function confirmEditScore() {
     
     const result = await API.admin.updateScore(id, newScore);
     if (result.success) {
-        alert("成绩已更新");
+        Modal.alert("成绩已更新");
         closeModal('editScoreAdminModal');
         
         const freshScores = await API.admin.getScores(AdminState.currentExamDate);
@@ -662,7 +663,7 @@ async function confirmEditScore() {
             renderDashboard();
         }
     } else {
-        alert(result.message || "修改失败");
+        Modal.alert(result.message || "修改失败");
     }
 }
 
@@ -674,15 +675,22 @@ async function confirmAddClass() {
         closeModal('addClassModal');
         renderClassManage();
     }
+    else {
+        Modal.alert('请输入完整班级信息');
+    }
 }
 
 async function confirmEditClass() {
     const name = document.getElementById('editClassName').value.trim();
     const gradeId = document.getElementById('editClassGradeId').value;
+    console.log(name)
     if (name) {
         await API.admin.updateClass(AdminState.currentEditClassId, name, gradeId);
         closeModal('editClassModal');
         renderClassManage();
+    }
+    else {
+        Modal.alert('请输入完整班级信息');
     }
 }
 
@@ -694,6 +702,9 @@ async function confirmAddStudent() {
         closeModal('addStudentModal');
         renderClassManage();
     }
+    else {
+        Modal.alert('请输入完整学生信息');
+    }
 }
 
 async function confirmAddTeacher() {
@@ -703,6 +714,9 @@ async function confirmAddTeacher() {
         AdminState.allTeachers = await API.admin.getTeachers();
         closeModal('addTeacherModal');
         renderClassManage();
+    }
+    else {
+        Modal.alert('请输入完整教师信息');
     }
 }
 
@@ -758,7 +772,7 @@ async function handleFileSelect(e) {
 
 async function importFromCSV(csvText) {
     const lines = csvText.trim().split('\n');
-    if (lines.length < 2) { alert('CSV 至少需要表头和一行数据'); return; }
+    if (lines.length < 2) { Modal.alert('CSV 至少需要表头和一行数据'); return; }
     const headers = lines[0].split(',').map(h => h.trim());
     const idx = {
         class: headers.indexOf('班级'),
@@ -769,7 +783,7 @@ async function importFromCSV(csvText) {
         date: headers.indexOf('考试日期')
     };
     if (idx.class === -1 || idx.name === -1 || idx.id === -1 || idx.subject === -1 || idx.score === -1) {
-        alert('表头必须包含：班级,姓名,学号,科目,成绩');
+        Modal.alert('表头必须包含：班级,姓名,学号,科目,成绩');
         return;
     }
     let success = 0, fail = 0;
@@ -796,7 +810,7 @@ async function importFromCSV(csvText) {
             errors.push(`第${i+1}行：${err.message || '添加失败'}`);
         }
     }
-    alert(`导入完成：成功 ${success} 条，失败 ${fail} 条。${errors.length ? '\n错误详情：\n' + errors.slice(0,5).join('\n') : ''}`);
+    Modal.alert(`导入完成：成功 ${success} 条，失败 ${fail} 条。${errors.length ? '\n错误详情：\n' + errors.slice(0,5).join('\n') : ''}`);
     await renderScoreAll();
 }
 
@@ -808,7 +822,7 @@ async function handleBatchImport(e) {
     reader.onload = async (ev) => {
         const csv = ev.target.result;
         const lines = csv.trim().split('\n');
-        if (lines.length < 2) { alert('至少需要表头和一行数据'); return; }
+        if (lines.length < 2) { Modal.alert('至少需要表头和一行数据'); return; }
         const headers = lines[0].split(',').map(h => h.trim());
         const idx = {
             class: headers.indexOf('班级'),
@@ -819,7 +833,7 @@ async function handleBatchImport(e) {
             date: headers.indexOf('考试日期')
         };
         if (idx.class === -1 || idx.name === -1 || idx.id === -1 || idx.subject === -1 || idx.score === -1) {
-            alert('表头必须包含：班级,姓名,学号,科目,成绩');
+            Modal.alert('表头必须包含：班级,姓名,学号,科目,成绩');
             return;
         }
         let success = 0, fail = 0;
@@ -846,7 +860,7 @@ async function handleBatchImport(e) {
                 errors.push(`第${i+1}行：${err.message || '添加失败'}`);
             }
         }
-        alert(`导入完成：成功 ${success} 条，失败 ${fail} 条。${errors.length ? '\n错误详情：\n' + errors.slice(0,5).join('\n') : ''}`);
+        Modal.alert(`导入完成：成功 ${success} 条，失败 ${fail} 条。${errors.length ? '\n错误详情：\n' + errors.slice(0,5).join('\n') : ''}`);
         renderScoreAll();
     };
     reader.readAsText(file, 'UTF-8');

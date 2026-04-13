@@ -2,6 +2,7 @@
 import { TeacherState } from './state.js';
 import { TeacherRender } from './render.js';
 import { NoticeCard } from '../common/components/NoticeCard.js';
+import { Modal } from '../common/components/Modal.js';
 
 let currentSection = 'home';
 
@@ -130,7 +131,7 @@ async function renderScoreModule() {
 function exportCSV() {
     const isTotal = TeacherState.currentSubjectFilter === '总分';
     const data = isTotal ? TeacherState.scoresTotal : TeacherState.scoresData.filter(s => s.subject === TeacherState.currentSubjectFilter);
-    if (!data.length) return alert('无数据');
+    if (!data.length) return Modal.alert('无数据');
     
     let csv = isTotal ? "姓名,学号,总分,班级排名\n" : "姓名,学号,成绩,班级排名\n";
     data.forEach(s => {
@@ -180,7 +181,7 @@ async function renderNoticeModule() {
                 openEditNoticeModal(n);
             },
             onDelete: async (n) => {
-                if (!confirm('确定删除这条通知吗？')) return;
+                if (!await Modal.confirm('确定删除这条通知吗？')) return;
                 await API.teacher.deleteNotice(n.id);
                 TeacherState.notices = await API.teacher.getNotices();
                 renderNoticeModule(); // 刷新列表
@@ -196,7 +197,7 @@ async function renderNoticeModule() {
     document.getElementById('publishNoticeBtn').addEventListener('click', async () => {
         const title = document.getElementById('newTitle').value.trim();
         const content = document.getElementById('newContent').value.trim();
-        if (!title || !content) return alert('请填写完整');
+        if (!title || !content) return Modal.alert('请填写完整');
         await API.teacher.publishNotice(title, content);
         TeacherState.notices = await API.teacher.getNotices();
         document.getElementById('newTitle').value = '';
@@ -241,7 +242,7 @@ function showReadStatusModal(data) {
 async function renderLogModule() {
     const section = document.getElementById('logSection');
     section.innerHTML = TeacherRender.logSkeleton();
-    
+
     const data = await API.teacher.getLogs(TeacherState.currentLogPage, TeacherState.logsPerPage);
     TeacherState.logTotal = data.total;
     const logs = data.logs;
@@ -362,7 +363,7 @@ async function confirmEditScore() {
 
     // 总分拦截
     if (TeacherState.currentSubjectFilter === '总分') {
-        alert("总分由各科成绩自动计算，不可直接编辑");
+        Modal.alert("总分由各科成绩自动计算，不可直接编辑");
         closeModal('editScoreModal');
         return;
     }
@@ -372,7 +373,7 @@ async function confirmEditScore() {
         s.scoreId == scoreId && s.subject === subject
     );
     if (!scoreItem) {
-        alert('成绩记录不存在');
+        Modal.alert('成绩记录不存在');
         closeModal('editScoreModal');
         return;
     }
@@ -382,7 +383,7 @@ async function confirmEditScore() {
         const fullRes = await API.teacher.getFullMark(subject);
         const fullMark = Number(fullRes.full_mark) || 100;
         if (isNaN(newScore) || newScore < 0 || newScore > fullMark) {
-            alert(`请输入有效的成绩 (0-${fullMark})`);
+            Modal.alert(`请输入有效的成绩 (0-${fullMark})`);
             return;
         }
     } catch (e) {
@@ -395,15 +396,15 @@ async function confirmEditScore() {
         const scoreId = TeacherState.currentEditId; 
         const result = await API.teacher.updateScore(scoreId,newScore);
         if (result.success) {
-            alert('成绩修改成功');
+            Modal.alert('成绩修改成功');
             closeModal('editScoreModal');
             await renderScoreModule();
             await renderHome();      // 同步更新首页统计
         } else {
-            alert(result.message || '修改失败，请重试');
+            Modal.alert(result.message || '修改失败，请重试');
         }
     } catch (err) {
-        alert('网络错误，请稍后重试');
+        Modal.alert('网络错误，请稍后重试');
     }
 }
 
