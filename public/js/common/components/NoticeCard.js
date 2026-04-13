@@ -16,17 +16,6 @@ export class NoticeCard {
      * @param {number} [notice.readCount] - 已读人数（教师端用）
      * @param {number} [notice.totalStudents] - 班级总人数（教师端用）
      * @param {number} [notice.totalStu] - 班级总人数（兼容字段）
-     *
-     * @param {Object} [options] - 组件配置项
-     * @param {boolean} [options.expandable=true] - 是否可展开/收起详情
-     * @param {boolean} [options.showBadge=true] - 是否显示未读/新徽章
-     * @param {boolean} [options.showActions=false] - 是否显示操作按钮（编辑/删除/查看名单）
-     * @param {boolean} [options.isUnread] - 强制指定未读状态（不传则自动根据已读人数判断）
-     * @param {string} [options.badgeText] - 徽章显示文字（不传则根据上下文显示“未读”或“新”）
-     * @param {Function} [options.onEdit] - 编辑按钮点击回调，参数为当前 notice 对象
-     * @param {Function} [options.onDelete] - 删除按钮点击回调，参数为当前 notice 对象
-     * @param {Function} [options.onExpand] - 卡片展开/收起时回调，参数为 notice.id
-     * @param {Function} [options.onViewRead] - 查看已读名单按钮点击回调，参数为当前 notice 对象
      */
     constructor(notice, options = {}) {
         this.notice = notice;
@@ -34,7 +23,12 @@ export class NoticeCard {
             expandable: true,
             showBadge: true,
             showActions: false,
+            showReadStats: true,
+            // 可选覆盖：未读/新 状态；若为 undefined 则使用 notice 中的字段或自动计算
             isUnread: undefined,
+            isNew: undefined,
+            // 可选自定义徽章文案（优先级最高）
+            badgeText: null,
             onEdit: null,
             onDelete: null,
             onExpand: null,
@@ -48,19 +42,19 @@ export class NoticeCard {
     // 生成 DOM 元素
     _render() {
         // 教师端：未读判断依据是 readCount < totalStudents（有未读学生）
-        // 教务端/学生端：可根据实际情况传入 isRead 字段，这里兼容多种情况
         const total = this.notice.totalStudents || this.notice.totalStu || 0;
         const read = this.notice.readCount || 0;
-        
-        // 是否未读：优先使用传入的 isUnread 标志，否则根据已读数判断
-        const isUnread = this.options.isUnread !== undefined 
-            ? this.options.isUnread 
-            : (total > 0 && read < total);
-        
-        // 是否为新发布（24小时内）- 用于教务端
-        const isNew = this._isNewNotice(this.notice.publishTime);
-        const badgeText = this.options.badgeText || (this.options.isUnread ? '未读' : '新');
-        
+
+        // 决定 isNew / isUnread 的优先级：以 options 中显式传入为准，否则自动计算
+        const isNew = this.options.isNew !== undefined ? this.options.isNew : this._isNewNotice(this.notice.publishTime);
+        const isUnread = this.options.isUnread !== undefined ? this.options.isUnread : (total > 0 && read < total);
+
+        // 计算徽章文案：优先使用 badgeText（若传入），否则未读优先显示“未读”，再显示“新”
+        const computedBadgeText = (this.options.badgeText !== undefined && this.options.badgeText !== null)
+            ? this.options.badgeText
+            : (isUnread ? '未读' : (isNew ? '新' : ''));
+        const showBadgeFlag = this.options.showBadge && Boolean(computedBadgeText);
+
         const container = document.createElement('div');
         container.className = `notice-item ${isUnread ? 'unread' : ''}`;
         container.dataset.id = this.notice.id;
@@ -69,7 +63,7 @@ export class NoticeCard {
             <div class="notice-summary">
                 <span class="title">
                     ${escapeHtml(this.notice.title)}
-                    ${this.options.showBadge && isUnread ? `<span class="notice-badge-sm" style="background: #e6a23c;">${badgeText}</span>` : ''}
+                    ${showBadgeFlag ? `<span class="notice-badge-sm" style="background: #e6a23c;">${escapeHtml(computedBadgeText)}</span>` : ''}
                 </span>
                 <span class="meta">${escapeHtml(this.notice.className)} · ${this._formatDate(this.notice.publishTime)}</span>
                 ${this.options.expandable ? '<span class="expand-icon">▼</span>' : ''}
@@ -77,7 +71,8 @@ export class NoticeCard {
             <div class="notice-detail">
                 <div class="notice-content">${escapeHtml(this.notice.content)}</div>
                 <div class="notice-time">
-                    发布人：${escapeHtml(this.notice.teacher_name)} | 已读 ${read}/${total || 0}
+                    发布人：${escapeHtml(this.notice.teacher_name)}
+                    ${this.options.showReadStats ? ` | 已读 ${read}/${total || 0}` : ''}
                 </div>
                 ${this.options.showActions ? this._renderActions() : ''}
             </div>

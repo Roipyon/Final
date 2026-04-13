@@ -458,7 +458,7 @@ router.get('/logs',isTeacher,async(req,res)=>{
     // 当前页数
     let page = parseInt(req.query.page) || 1;
     // 每页 5 条
-    let pageSize = parseInt(req.query.pageSize) || 5;
+    let pageSize = parseInt(req.query.pageSize) || 15;
     // 跳过多少条（分页渲染）
     const offset = (page - 1)*pageSize;
     // 查总数

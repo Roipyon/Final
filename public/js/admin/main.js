@@ -136,8 +136,8 @@ async function renderDashboard() {
     latestNotices.forEach(notice => {
         const card = new NoticeCard(notice, {
             expandable: false,          // 首页不展开
-            showBadge: true,            // 显示“新”徽章（基于发布时间）
             showActions: false,         // 无操作按钮
+            isNew: true
         });
         card.mount(noticeContainer);
     });
@@ -351,14 +351,9 @@ function renderNoticeAll() {
             return;
         }
         notices.forEach(notice => {
-            const isNew = isNewNotice(notice.publishTime);
             const card = new NoticeCard(notice, {
                 expandable: true,
-                showBadge: true,        // 显示“新”徽章
-                showActions: false,     // 管理员无操作按钮
-                // 可以传入自定义未读判断：管理员端基于发布时间
-                isUnread: isNew,
-                badgeText: '新'
+                showActions: false,    // 管理员无操作按钮
             });
             card.mount(container);
         });
@@ -673,6 +668,8 @@ async function confirmAddClass() {
         await API.admin.addClass(name, gradeId);
         closeModal('addClassModal');
         renderClassManage();
+    } else {
+        alert('班级名称不能为空');
     }
 }
 
@@ -683,6 +680,8 @@ async function confirmEditClass() {
         await API.admin.updateClass(AdminState.currentEditClassId, name, gradeId);
         closeModal('editClassModal');
         renderClassManage();
+    } else {
+        alert('班级名称不能为空');
     }
 }
 
@@ -693,6 +692,8 @@ async function confirmAddStudent() {
         await API.admin.addStudent(AdminState.currentAddStudentClassId, name, studentId);
         closeModal('addStudentModal');
         renderClassManage();
+    } else {
+        alert('学生名称不能为空');
     }
 }
 
@@ -703,6 +704,8 @@ async function confirmAddTeacher() {
         AdminState.allTeachers = await API.admin.getTeachers();
         closeModal('addTeacherModal');
         renderClassManage();
+    } else {
+        alert('教师名称不能为空');
     }
 }
 
@@ -798,58 +801,6 @@ async function importFromCSV(csvText) {
     }
     alert(`导入完成：成功 ${success} 条，失败 ${fail} 条。${errors.length ? '\n错误详情：\n' + errors.slice(0,5).join('\n') : ''}`);
     await renderScoreAll();
-}
-
-// 新增批量导入处理函数（放在文件末尾）
-async function handleBatchImport(e) {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = async (ev) => {
-        const csv = ev.target.result;
-        const lines = csv.trim().split('\n');
-        if (lines.length < 2) { alert('至少需要表头和一行数据'); return; }
-        const headers = lines[0].split(',').map(h => h.trim());
-        const idx = {
-            class: headers.indexOf('班级'),
-            name: headers.indexOf('姓名'),
-            id: headers.indexOf('学号'),
-            subject: headers.indexOf('科目'),
-            score: headers.indexOf('成绩'),
-            date: headers.indexOf('考试日期')
-        };
-        if (idx.class === -1 || idx.name === -1 || idx.id === -1 || idx.subject === -1 || idx.score === -1) {
-            alert('表头必须包含：班级,姓名,学号,科目,成绩');
-            return;
-        }
-        let success = 0, fail = 0;
-        const errors = [];
-        for (let i = 1; i < lines.length; i++) {
-            const cols = lines[i].split(',').map(c => c.trim());
-            if (cols.length < 5) continue;
-            const className = cols[idx.class];
-            const studentName = cols[idx.name];
-            const studentId = cols[idx.id];
-            const subject = cols[idx.subject];
-            const score = parseFloat(cols[idx.score]);
-            const examDate = cols[idx.date] || AdminState.currentExamDate || '';
-            if (!className || !studentName || !studentId || !subject || isNaN(score)) {
-                fail++;
-                errors.push(`第${i+1}行：数据不完整`);
-                continue;
-            }
-            try {
-                await API.admin.addScore({ className, studentName, studentId, subject, score, examDate });
-                success++;
-            } catch (err) {
-                fail++;
-                errors.push(`第${i+1}行：${err.message || '添加失败'}`);
-            }
-        }
-        alert(`导入完成：成功 ${success} 条，失败 ${fail} 条。${errors.length ? '\n错误详情：\n' + errors.slice(0,5).join('\n') : ''}`);
-        renderScoreAll();
-    };
-    reader.readAsText(file, 'UTF-8');
 }
 
 // ---------- 绑定所有模态框事件（静态按钮）----------

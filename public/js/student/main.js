@@ -105,10 +105,9 @@ function renderHomeModule() {
             const isRead = notice.isRead === 1 || notice.isRead === true;
             const card = new NoticeCard(notice, {
                 expandable: false,
-                showBadge: true,
                 showActions: false,
-                isUnread: !isRead,
-                badgeText: '未读'
+                showReadStats: false,
+                isUnread: !isRead
             });
             card.element.style.cursor = 'pointer';
             card.element.addEventListener('click', () => {
@@ -203,10 +202,8 @@ function renderNoticeModule() {
         const isRead = notice.isRead === 1 || notice.isRead === true;
         const card = new NoticeCard(notice, {
             expandable: true,
-            showBadge: true,
             showActions: false,
             isUnread: !isRead,
-            badgeText: '未读',
             onExpand: (noticeId) => {
                 if (!isRead) {
                     markAsRead(noticeId);

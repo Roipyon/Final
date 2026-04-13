@@ -33,15 +33,14 @@ async function refreshAllData(examDate = '') {
 }
 
 // ---------- 首页 ----------
+// ---------- 首页 ----------
 async function renderHome() {
     const section = document.getElementById('homeSection');
     section.innerHTML = TeacherRender.homeSkeleton();
 
     const unreadCount = TeacherState.notices.filter(n => n.unreadCount > 0).length;
-    const recentNotices = [...TeacherState.notices]
-        .sort((a, b) => new Date(b.publishTime) - new Date(a.publishTime))
-        .slice(0, 3);
     
+    // 构建真实内容
     const html = `
         <h3>班级工作台 · ${escapeHtml(TeacherState.className || '未绑定班级')}</h3>
         <p>欢迎 ${escapeHtml(TeacherState.currentTeacher?.name || '')} 老师</p>
@@ -53,19 +52,48 @@ async function renderHome() {
         </div>
         <div style="margin-top:24px;">
             <h4>最新通知</h4>
-            ${recentNotices.map(n => `
-                <div style="padding:12px 0; border-bottom:1px solid #ddd;">
-                    <strong>${escapeHtml(n.title)}</strong>
-                    <span style="float:right;">已读 ${n.readCount}/${n.totalStudents}</span>
-                    <div style="font-size:12px; color:#666;">${formatDate(n.publishTime)}</div>
-                </div>
-            `).join('')}
+            <div id="homeNoticeList"></div>
             <div style="text-align:right; margin-top:12px;">
                 <a href="#" data-nav="notice" class="nav-link">管理通知 →</a>
             </div>
         </div>
     `;
-    document.getElementById('homeSection').innerHTML = html;
+    section.innerHTML = html;
+
+    const container = document.getElementById('homeNoticeList');
+    if (container) {
+        // 取最新 3 条通知，按发布时间倒序
+        const recentNotices = [...TeacherState.notices]
+            .sort((a, b) => new Date(b.publishTime) - new Date(a.publishTime))
+            .slice(0, 3);
+        
+        if (recentNotices.length === 0) {
+            container.innerHTML = '<div class="empty-tip">暂无通知</div>';
+            return;
+        }
+
+        recentNotices.forEach(notice => {
+            // 判断是否有未读学生（未读人数 > 0 即为未完全阅读）
+            const hasUnread = (notice.unreadCount > 0) || (notice.readCount < notice.totalStudents);
+            
+            const card = new NoticeCard(notice, {
+                expandable: false,           // 首页不展开详情，节省空间
+                showActions: false,          // 无编辑/删除按钮
+                showReadStats: true,         // 显示已读人数
+                isUnread: hasUnread,         // 传递未读状态，用于样式高亮
+            });
+            
+            // 点击卡片跳转到通知管理页
+            card.element.style.cursor = 'pointer';
+            card.element.addEventListener('click', (e) => {
+                // 如果点击的是内部按钮（理论上没有），不跳转
+                if (e.target.tagName === 'BUTTON') return;
+                switchSection('notice');
+            });
+            
+            card.mount(container);
+        });
+    }
 }
 
 // ---------- 成绩管理 ----------
@@ -176,7 +204,7 @@ async function renderNoticeModule() {
             expandable: true,
             showActions: true,   // 显示编辑/删除按钮
             onEdit: (n) => {
-                // 打开编辑模态框（您已有的函数）
+                // 打开编辑模态框
                 openEditNoticeModal(n);
             },
             onDelete: async (n) => {
@@ -405,6 +433,13 @@ async function confirmEditScore() {
     } catch (err) {
         alert('网络错误，请稍后重试');
     }
+}
+
+function openEditNoticeModal(notice) {
+    TeacherState.currentEditingNoticeId = notice.id;
+    document.getElementById('editNoticeTitle').value = notice.title || '';
+    document.getElementById('editNoticeContent').value = notice.content || '';
+    document.getElementById('editNoticeModal').style.display = 'flex';
 }
 
 function closeModal(id) { document.getElementById(id).style.display = 'none'; }
