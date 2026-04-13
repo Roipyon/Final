@@ -1,6 +1,7 @@
 // ================== 学生端主入口 ==================
 import { StudentState } from './state.js';
 import { StudentRender } from './render.js';
+import { NoticeCard } from '../common/components/NoticeCard.js';
 
 let currentSection = 'home';
 
@@ -88,21 +89,32 @@ function renderHomeModule() {
         <div style="text-align:right;"><a href="#" data-nav="score" class="nav-link">查看全部成绩 →</a></div>
         
         <h4 style="margin-top:24px;">最新班级通知 <span class="badge unread-badge">${unread}条未读</span></h4>
-        <div id="homeNoticeList">
-            ${topNotices.map(n => `
-                <div class="recent-notice-item ${n.isRead ? '' : 'unread'}" data-id="${n.id}" style="cursor:pointer; padding:12px; border-bottom:1px solid #ddd;">
-                    <strong>${escapeHtml(n.title)} ${!n.isRead ? '<span class="notice-badge-sm">未读</span>' : ''}</strong>
-                    <div style="font-size:12px; color:#666;">${formatDateTime(n.publishTime)}</div>
-                </div>
-            `).join('')}
-        </div>
+        <div id="homeNoticeList"></div>
         <div style="text-align:right;"><a href="#" data-nav="notice" class="nav-link">查看全部通知 →</a></div>
     `;
     document.getElementById('homeSection').innerHTML = html;
     
-    document.querySelectorAll('#homeNoticeList .recent-notice-item').forEach(el => {
-        el.addEventListener('click', () => markAsRead(parseInt(el.dataset.id)));
-    });
+    const homeNoticeContainer = document.getElementById('homeNoticeList');
+    if (homeNoticeContainer) {
+        homeNoticeContainer.innerHTML = '';
+        const topNotices = getFilteredSortedNotices().slice(0, 3);
+        topNotices.forEach(notice => {
+            const isRead = notice.isRead === 1 || notice.isRead === true;
+            const card = new NoticeCard(notice, {
+                expandable: false,
+                showBadge: true,
+                showActions: false,
+                isUnread: !isRead,
+                badgeText: '未读'
+            });
+            card.element.style.cursor = 'pointer';
+            card.element.addEventListener('click', () => {
+                markAsRead(notice.id);
+                switchSection('notice');
+            });
+            card.mount(homeNoticeContainer);
+        });
+    }
 }
 
 // ---------- 成绩模块 ----------
@@ -155,10 +167,12 @@ async function renderScoreModule() {
 function renderNoticeModule() {
     const filtered = getFilteredSortedNotices();
     const totalPages = Math.ceil(filtered.length / StudentState.noticesPerPage);
-    if (StudentState.currentNoticePage > totalPages) StudentState.currentNoticePage = Math.max(1, totalPages);
+    if (StudentState.currentNoticePage > totalPages) {
+        StudentState.currentNoticePage = Math.max(1, totalPages);
+    }
     const start = (StudentState.currentNoticePage - 1) * StudentState.noticesPerPage;
     const pageNotices = filtered.slice(start, start + StudentState.noticesPerPage);
-    
+
     const html = `
         <div style="display:flex; justify-content:space-between;">
             <h3>班级通知 <span class="badge unread-badge">${getUnreadCount()}条未读</span></h3>
@@ -167,18 +181,44 @@ function renderNoticeModule() {
                 <button class="filter-select ${StudentState.noticeFilter === 'unread' ? 'active-filter' : ''}" data-filter="unread">未读</button>
             </div>
         </div>
-        <div id="noticeListContainer">${StudentRender.noticeList(pageNotices)}</div>
-        <div class="pagination">
-            ${Array.from({length: totalPages}, (_, i) => `
-                <button class="page-btn ${i+1 === StudentState.currentNoticePage ? 'active-page' : ''}" data-page="${i+1}">${i+1}</button>
-            `).join('')}
-        </div>
+        <div id="noticeListContainer"></div>
+        <div class="pagination" id="noticePagination"></div>
     `;
     document.getElementById('noticeSection').innerHTML = html;
-    
-    document.querySelectorAll('#noticeListContainer .notice-item').forEach(el => {
-        el.addEventListener('click', () => markAsRead(parseInt(el.dataset.id)));
+
+    const container = document.getElementById('noticeListContainer');
+    container.innerHTML = '';
+
+    // 使用 NoticeCard 渲染当前页通知
+    pageNotices.forEach(notice => {
+        const isRead = notice.isRead === 1 || notice.isRead === true;
+        const card = new NoticeCard(notice, {
+            expandable: true,
+            showBadge: true,
+            showActions: false,
+            isUnread: !isRead,
+            badgeText: '未读',
+            onExpand: (noticeId) => {
+                if (!isRead) {
+                    markAsRead(noticeId);
+                    card.markAsRead();
+                }
+            }
+        });
+        card.mount(container);
     });
+
+    // 渲染分页
+    const paginationContainer = document.getElementById('noticePagination');
+    if (totalPages > 1) {
+        paginationContainer.innerHTML = Array.from({ length: totalPages }, (_, i) => `
+            <button class="page-btn ${i + 1 === StudentState.currentNoticePage ? 'active-page' : ''}" data-page="${i + 1}">${i + 1}</button>
+        `).join('');
+    } else {
+        paginationContainer.innerHTML = '';
+    }
+
+    // 绑定筛选按钮
     document.querySelectorAll('[data-filter]').forEach(btn => {
         btn.addEventListener('click', () => {
             StudentState.noticeFilter = btn.dataset.filter;
@@ -186,12 +226,15 @@ function renderNoticeModule() {
             renderNoticeModule();
         });
     });
-    document.querySelectorAll('.pagination .page-btn').forEach(btn => {
+
+    // 绑定分页按钮
+    document.querySelectorAll('#noticePagination .page-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             StudentState.currentNoticePage = parseInt(btn.dataset.page);
             renderNoticeModule();
         });
     });
+
     updateUnreadBadge();
 }
 
