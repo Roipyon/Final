@@ -8,24 +8,25 @@ let currentSection = 'home';
 
 // ---------- 数据加载 ----------
 async function loadBaseData() {
-    const info = await API.teacher.getInfo();
+    const info = await API.teacher.getInfo({ useCache: true, ttl: 1800 });
     TeacherState.currentTeacher = info;
     TeacherState.className = info.className;
     TeacherState.classId = info.classId;
     
-    const exams = await API.teacher.getExams();
+    const exams = await API.teacher.getExams({ useCache: true, ttl: 600 });
     TeacherState.examList = exams;
     
-    const notices = await API.teacher.getNotices();
+    const notices = await API.teacher.getNotices({ useCache: true, ttl: 300 });
     TeacherState.notices = notices;
 }
 
 async function refreshAllData(examDate = '') {
+    const cacheTTL = examDate ? 300 : 600;
     const [scores, totalScores, general, subjectGeneral] = await Promise.all([
-        API.teacher.getScores(examDate),
-        API.teacher.getTotalScores(examDate),
-        API.teacher.getGeneral(examDate),
-        API.teacher.getSubjectGeneral(examDate)
+        API.teacher.getScores(examDate, { useCache: true, ttl: cacheTTL }),
+        API.teacher.getTotalScores(examDate, { useCache: true, ttl: cacheTTL }),
+        API.teacher.getGeneral(examDate, { useCache: true, ttl: cacheTTL }),
+        API.teacher.getSubjectGeneral(examDate, { useCache: true, ttl: cacheTTL })
     ]);
     TeacherState.scoresData = scores;
     TeacherState.scoresTotal = totalScores;
@@ -37,6 +38,12 @@ async function refreshAllData(examDate = '') {
 async function renderHome() {
     const section = document.getElementById('homeSection');
     section.innerHTML = TeacherRender.homeSkeleton();
+
+    // 检查数据是否存在
+    if (!TeacherState.general || TeacherState.general.max === undefined) {
+        section.innerHTML = '<div class="empty-tip">网络异常，请检查连接后刷新</div>';
+        return;
+    }
 
     const unreadCount = TeacherState.notices.filter(n => n.unreadCount > 0).length;
     const recentNotices = [...TeacherState.notices]
@@ -75,7 +82,15 @@ async function renderScoreModule() {
     const isTotal = TeacherState.currentSubjectFilter === '总分';
     section.innerHTML = TeacherRender.scoreSkeleton(isTotal);
 
-    await refreshAllData(TeacherState.currentExamDate);
+    try {
+        await refreshAllData(TeacherState.currentExamDate);
+    } catch (err) {
+        console.warn('成绩数据加载失败，尝试使用缓存数据');
+        if (!TeacherState.scoresData.length && !TeacherState.scoresTotal.length) {
+            section.innerHTML = '<div class="empty-tip">网络异常，请刷新重试</div>';
+            return;
+        }
+    }
     
     let displayData, stats;
     
@@ -182,7 +197,7 @@ async function renderNoticeModule() {
             expandable: true,
             showActions: true,   // 显示编辑/删除按钮
             onEdit: (n) => {
-                // 打开编辑模态框（您已有的函数）
+                // 打开编辑模态框
                 openEditNoticeModal(n);
             },
             onDelete: async (n) => {
@@ -241,6 +256,13 @@ function showReadStatusModal(data) {
     
     // 显示模态框
     document.getElementById('readStatusModal').style.display = 'flex';
+}
+
+function openEditNoticeModal(notice) {
+    TeacherState.currentEditingNoticeId = notice.id;
+    document.getElementById('editNoticeTitle').value = notice.title;
+    document.getElementById('editNoticeContent').value = notice.content;
+    document.getElementById('editNoticeModal').style.display = 'flex';
 }
 
 // ---------- 日志 ----------
@@ -400,8 +422,7 @@ async function confirmEditScore() {
     }
 
     // 提交更新
-    try {
-        const scoreId = TeacherState.currentEditId; 
+    try { 
         const result = await API.teacher.updateScore(scoreId,newScore);
         if (result.success) {
             Modal.alert('成绩修改成功');
@@ -422,6 +443,13 @@ function closeModal(id) { document.getElementById(id).style.display = 'none'; }
 async function init() {
     await loadBaseData();
     await refreshAllData();
+
+    const savedFilter = Cache.get('teacher_last_filter');
+    if (savedFilter) {
+        TeacherState.currentExamDate = savedFilter.currentExamDate ?? '';
+        TeacherState.currentSubjectFilter = savedFilter.currentSubjectFilter ?? '总分';
+        TeacherState.currentLogPage = savedFilter.currentLogPage ?? 1;
+    }
     
     const header = TeacherRender.headerInfo();
     document.querySelector('.user-avatar').innerText = header.avatar;
@@ -432,5 +460,14 @@ async function init() {
     
     document.getElementById('logoutBtn')?.addEventListener('click', () => API.logout());
 }
+
+window.addEventListener('using-stale-cache', () => {
+    if (document.querySelector('.offline-toast')) return;
+    const toast = document.createElement('div');
+    toast.className = 'offline-toast';
+    toast.innerHTML = '当前为离线数据，联网后自动更新 <button id="force-refresh">立即刷新</button>';
+    document.body.appendChild(toast);
+    document.getElementById('force-refresh').onclick = () => location.reload();
+});
 
 init();

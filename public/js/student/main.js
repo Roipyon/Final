@@ -7,23 +7,24 @@ let currentSection = 'home';
 
 // ---------- 数据加载 ----------
 async function loadBaseData() {
-    const info = await API.student.getInfo();
+    const info = await API.student.getInfo({ useCache: true, ttl: 1800 });
     StudentState.currentStudent = info;
     StudentState.className = info.className;
     StudentState.classId = info.classId;
     
-    const exams = await API.student.getExams();
+    const exams = await API.student.getExams({ useCache: true, ttl: 600 });
     StudentState.examList = exams;
     
-    const notices = await API.student.getNotices();
+    const notices = await API.student.getNotices({ useCache: true, ttl: 300 });
     StudentState.notices = notices;
 }
 
 async function refreshAllData(examDate = '') {
+    const cacheTTL = examDate ? 300 : 600;
     const [scores, total, classStat] = await Promise.all([
-        API.student.getGrade(examDate),
-        API.student.getTotalRank(examDate),
-        API.student.getClassStat(examDate)
+        API.student.getGrade(examDate, { useCache: true, ttl: cacheTTL }),
+        API.student.getTotalRank(examDate, { useCache: true, ttl: cacheTTL }),
+        API.student.getClassStat(examDate, { useCache: true, ttl: cacheTTL })
     ]);
     StudentState.personalScores = scores;
     StudentState.personalTotal = total;
@@ -70,6 +71,12 @@ function updateUnreadBadge() {
 function renderHomeModule() {
     const section = document.getElementById('homeSection');
     section.innerHTML = StudentRender.homeSkeleton();
+
+    // 如果数据未加载（离线且无缓存），显示提示
+    if (!StudentState.personalScores.length && !StudentState.personalTotal.total) {
+        section.innerHTML = '<div class="empty-tip">网络异常，请检查连接后刷新</div>';
+        return;
+    }
 
     const unread = getUnreadCount();
     const sortedNotices = getFilteredSortedNotices();
@@ -122,7 +129,18 @@ async function renderScoreModule() {
     const section = document.getElementById('scoreSection');
     section.innerHTML = StudentRender.scoreSkeleton();
 
-    await refreshAllData(StudentState.currentExamDate);
+    try {
+        await refreshAllData(StudentState.currentExamDate);
+    } catch (err) {
+        console.warn('成绩数据加载失败，尝试使用缓存数据');
+        // 如果 refreshAllData 抛出异常，说明网络失败且无缓存
+        // 此时检查 State 中是否已有旧数据（可能来自之前成功加载或首页已缓存）
+        if (!StudentState.personalScores.length && !StudentState.classStatBySubject.length) {
+            section.innerHTML = '<div class="empty-tip">网络异常，请刷新重试</div>';
+            return;
+        }
+        // 有旧数据，继续渲染（不重新赋值，使用现有 State）
+    }
     
     const stat = StudentState.classStatBySubject.find(s => s.subject === StudentState.currentSubjectFilter) || {};
     const examOptions = '<option value="">最新考试</option>' +
@@ -150,7 +168,7 @@ async function renderScoreModule() {
             <div class="stat-card"><div class="stat-value">${stat.passRate || '0%'}</div><div>及格率</div></div>
         </div>
     `;
-    document.getElementById('scoreSection').innerHTML = html;
+    section.innerHTML = html;
     
     document.getElementById('examSelect').addEventListener('change', async (e) => {
         StudentState.currentExamDate = formatDate(e.target.value);
@@ -279,6 +297,14 @@ function bindGlobalEvents() {
 async function init() {
     await loadBaseData();
     await refreshAllData();
+
+    const savedFilter = Cache.get('student_last_filter');
+    if (savedFilter) {
+        StudentState.currentExamDate = savedFilter.currentExamDate ?? '';
+        StudentState.currentSubjectFilter = savedFilter.currentSubjectFilter ?? '数学';
+        StudentState.noticeFilter = savedFilter.noticeFilter ?? 'all';
+        StudentState.currentNoticePage = savedFilter.currentNoticePage ?? 1;
+    }
     
     const header = StudentRender.headerInfo();
     document.querySelector('.user-avatar').innerText = header.avatar;
@@ -289,5 +315,14 @@ async function init() {
     
     document.getElementById('logoutBtn')?.addEventListener('click', () => API.logout());
 }
+
+window.addEventListener('using-stale-cache', () => {
+    if (document.querySelector('.offline-toast')) return;
+    const toast = document.createElement('div');
+    toast.className = 'offline-toast';
+    toast.innerHTML = '当前为离线数据，联网后自动更新 <button id="force-refresh">立即刷新</button>';
+    document.body.appendChild(toast);
+    document.getElementById('force-refresh').onclick = () => location.reload();
+});
 
 init();

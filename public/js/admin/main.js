@@ -10,13 +10,13 @@ let currentSection = 'dashboard';
 // ---------- 数据加载 ----------
 async function loadBaseData() {
     const [info, classes, teachers, grades, exams, notices, logs] = await Promise.all([
-        API.admin.getInfo(),
-        API.admin.getClasses(),
-        API.admin.getTeachers(),
-        API.admin.getGrades(),
-        API.admin.getExams(),
-        API.admin.getNotices(),
-        API.admin.getLogs()
+        API.admin.getInfo({ useCache: true, ttl: 1800 }),
+        API.admin.getClasses({ useCache: true, ttl: 3600 }),
+        API.admin.getTeachers({ useCache: true, ttl: 3600 }),
+        API.admin.getGrades({ useCache: true, ttl: 7200 }),
+        API.admin.getExams({ useCache: true, ttl: 600 }),
+        API.admin.getNotices({ useCache: true, ttl: 300 }),
+        API.admin.getLogs({ useCache: true, ttl: 600 })
     ]);
     AdminState.currentAdmin = info;
     AdminState.classes = classes;
@@ -39,11 +39,12 @@ function updateSubjects() {
 }
 
 async function loadScoresData() {
+    const cacheTTL = AdminState.currentExamDate ? 300 : 600;
     if (AdminState.globalSubjectFilter === '总分') {
-        const data = await API.admin.getTotalScores(AdminState.currentExamDate);
+        const data = await API.admin.getTotalScores(AdminState.currentExamDate, { useCache: true, ttl: cacheTTL });
         AdminState.scoresTotal = data.map(item => ({ ...item, score: parseFloat(item.total_score) || 0 }));
     } else {
-        const data = await API.admin.getScores(AdminState.currentExamDate);
+        const data = await API.admin.getScores(AdminState.currentExamDate, { useCache: true, ttl: cacheTTL });
         AdminState.allScores = data.map(s => ({ ...s, score: parseFloat(s.score) || 0 }));
     }
     updateSubjects();
@@ -71,7 +72,15 @@ async function renderScoreAll() {
     bindFilterBarEvents();
 
     // ========== 2. 异步加载数据 ==========
-    await loadScoresData();
+    try {
+        await loadScoresData();
+    } catch (err) {
+        console.warn('成绩数据加载失败，尝试使用缓存数据');
+        if (!AdminState.allScores.length && !AdminState.scoresTotal.length) {
+            section.innerHTML = '<div class="empty-tip">网络异常，请刷新重试</div>';
+            return;
+        }
+    }
     
     // ========== 3. 数据处理 ==========
     let rawData = isTotal ? AdminState.scoresTotal : AdminState.allScores;
@@ -114,16 +123,26 @@ async function renderDashboard() {
     // 骨架屏
     section.innerHTML = AdminRender.dashboardSkeleton();
     
-    // 确保数据已加载（如果已加载可跳过，但为保险起见重新获取最新统计）
-    // 注意：基础数据在 init 时已加载，这里只需刷新可能变化的数据
-    const [classes, notices, logs] = await Promise.all([
-        API.admin.getClasses(),
-        API.admin.getNotices(),
-        API.admin.getLogs()
-    ]);
-    AdminState.classes = classes;
-    AdminState.allNotices = notices;
-    AdminState.systemLogs = logs;
+    try {
+        const [classes, notices, logs] = await Promise.all([
+            API.admin.getClasses(),
+            API.admin.getNotices(),
+            API.admin.getLogs()
+        ]);
+        AdminState.classes = classes;
+        AdminState.allNotices = notices;
+        AdminState.systemLogs = logs;
+    } catch (err) {
+        console.warn('仪表盘数据加载失败，使用缓存数据');
+        if (!AdminState.classes.length) {
+            section.innerHTML = '<div class="empty-tip">网络异常，请刷新重试</div>';
+            return;
+        }
+    }
+
+    const classes = AdminState.classes;
+    const notices = AdminState.allNotices;
+    const logs = AdminState.systemLogs;
     
     // 真实渲染
     const totalClasses = classes.length;
@@ -566,6 +585,13 @@ async function confirmAddScore() {
         'addScoreSubject', 'addScoreValue', 'addScoreExamDate'
     ]);
 
+    const className = data.addScoreClass;
+    const studentName = data.addScoreStudentName;
+    const studentId = data.addScoreStudentId;
+    const subject = data.addScoreSubject;
+    const score = parseFloat(data.addScoreValue);
+    const examDate = data.addScoreExamDate;
+
     if (!className || !studentName || !studentId || !subject) {
         Modal.alert('请完整填写');
         return;
@@ -892,6 +918,18 @@ function bindModalEvents() {
 // ---------- 初始化 ----------
 async function init() {
     await loadBaseData();
+
+    // 恢复上次筛选条件
+    const savedFilter = Cache.get('admin_last_filter');
+    if (savedFilter) {
+        AdminState.globalClassFilter = savedFilter.globalClassFilter ?? '所有班级';
+        AdminState.globalSubjectFilter = savedFilter.globalSubjectFilter ?? '数学';
+        AdminState.currentExamDate = savedFilter.currentExamDate ?? '';
+        AdminState.currentSortField = savedFilter.currentSortField ?? 'className';
+        AdminState.currentSortOrder = savedFilter.currentSortOrder ?? 'asc';
+        AdminState.currentSearchKeyword = savedFilter.currentSearchKeyword ?? '';
+    }
+
     const header = AdminRender.headerInfo();
     document.querySelector('.user-avatar').innerText = header.avatar;
     document.querySelector('.user-info span').innerText = header.name;
@@ -902,5 +940,14 @@ async function init() {
     // 退出登录
     document.getElementById('logoutBtn')?.addEventListener('click', () => API.logout());
 }
+
+window.addEventListener('using-stale-cache', () => {
+    if (document.querySelector('.offline-toast')) return;
+    const toast = document.createElement('div');
+    toast.className = 'offline-toast';
+    toast.innerHTML = '当前为离线数据，联网后自动更新 <button id="force-refresh">立即刷新</button>';
+    document.body.appendChild(toast);
+    document.getElementById('force-refresh').onclick = () => location.reload();
+});
 
 init();

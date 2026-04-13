@@ -728,3 +728,28 @@ hr {
     border-top: 1px solid var(--border);
 }
 .notice-item.expanded .expand-icon { transform: rotate(180deg); }
+
+.offline-toast {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--warning);
+    color: white;
+    padding: 12px 20px;
+    border-radius: 30px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+.offline-toast button {
+    background: white;
+    color: var(--warning);
+    border: none;
+    padding: 4px 12px;
+    border-radius: 20px;
+    cursor: pointer;
+    font-weight: 500;
+}
