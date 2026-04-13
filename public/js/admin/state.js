@@ -87,46 +87,63 @@ export function sortScores(data, isTotal, hasExamDate) {
     
     return [...data].sort((a, b) => {
         let valA, valB;
+        
         switch (currentSortField) {
             case 'totalScore':
             case 'subjectScore':
                 valA = a.score || 0;
                 valB = b.score || 0;
                 break;
+                
             case 'className':
-                const cmp = (a.className || '').localeCompare(b.className || '', 'zh-CN');
-                return currentSortOrder === 'asc' ? cmp : -cmp;
+                // 先按班级名称排序（按主排序方向）
+                const classNameCompare = (a.className || '').localeCompare(b.className || '', 'zh-CN');
+                if (classNameCompare !== 0) {
+                    return currentSortOrder === 'asc' ? classNameCompare : -classNameCompare;
+                }
+                // 同班级内固定按分数降序（不受主排序方向影响）
+                return (b.score || 0) - (a.score || 0);
+                
             case 'studentId':
                 valA = a.studentId || '';
                 valB = b.studentId || '';
                 break;
+                
             case 'studentName':
                 valA = a.studentName || '';
                 valB = b.studentName || '';
                 break;
+                
             case 'totalGradeRank':
                 valA = a.classRank || 9999;
                 valB = b.classRank || 9999;
                 break;
+                
             case 'totalClassRank':
                 valA = a.classRankInClass || 9999;
                 valB = b.classRankInClass || 9999;
                 break;
+                
             case 'subjectGradeRank':
                 valA = a.grade_rank_subject || 9999;
                 valB = b.grade_rank_subject || 9999;
                 break;
+                
             case 'subjectClassRank':
                 valA = a.class_rank_subject || 9999;
                 valB = b.class_rank_subject || 9999;
                 break;
-            default: return 0;
+                
+            default:
+                return 0;
         }
+        
+        // 字符串类型按本地化比较
         if (typeof valA === 'string') {
-            const cmp = valA.localeCompare(valB, 'zh-CN');
-            return currentSortOrder === 'asc' ? cmp : -cmp;
-        } else {
-            return currentSortOrder === 'asc' ? valA - valB : valB - valA;
+            const compareResult = valA.localeCompare(valB, 'zh-CN');
+            return currentSortOrder === 'asc' ? compareResult : -compareResult;
         }
+        // 数字类型比较
+        return currentSortOrder === 'asc' ? valA - valB : valB - valA;
     });
 }

@@ -1,4 +1,3 @@
-// public/js/admin/main.js
 // ================== 教务端主入口 ==================
 
 import { AdminState, filterScores, sortScores, getAvailableSortFields } from './state.js';
@@ -48,7 +47,6 @@ async function loadScoresData() {
     updateSubjects();
 }
 
-// ---------- 成绩页面 ----------
 async function renderScoreAll() {
     const isTotal = AdminState.globalSubjectFilter === '总分';
     if (isTotal && !AdminState.currentExamDate) {
@@ -56,69 +54,107 @@ async function renderScoreAll() {
         AdminState.globalSubjectFilter = firstSubject;
         return renderScoreAll();
     }
+
+    const section = document.getElementById('scoreAllSection');
+    
+    // ========== 1. 立即渲染骨架屏 ==========
+    section.innerHTML = `
+        <h3>全量成绩管理 (跨班级)</h3>
+        ${AdminRender.filterBar()}
+        ${AdminRender.statsCardsSkeleton(isTotal)}
+        ${AdminRender.scoreTableSkeleton(8)}
+    `;
+    
+    // 筛选栏的事件绑定（因为 filterBar 是静态 HTML，需要在这里绑定事件）
+    bindFilterBarEvents();
+
+    // ========== 2. 异步加载数据 ==========
     await loadScoresData();
+    
+    // ========== 3. 数据处理 ==========
     let rawData = isTotal ? AdminState.scoresTotal : AdminState.allScores;
     let displayData = filterScores(rawData, isTotal);
     const stats = computeStats(displayData);
     const hasExamDate = !!AdminState.currentExamDate;
     displayData = sortScores(displayData, isTotal, hasExamDate);
     
-    const section = document.getElementById('scoreAllSection');
+    // ========== 4. 用真实内容替换骨架屏 ==========
     section.innerHTML = `
         <h3>全量成绩管理 (跨班级)</h3>
         ${AdminRender.filterBar()}
         ${AdminRender.statsCards(stats, isTotal)}
         ${AdminRender.scoreTable(displayData, isTotal, hasExamDate)}
     `;
+    
+    // 重新绑定筛选栏事件
+    bindFilterBarEvents();
     updateSortButtonText();
-    document.getElementById('examSelect').addEventListener('change', (e) => {
-        AdminState.currentExamDate = e.target.value;
-        AdminState.currentSortField = 'className';
-        AdminState.currentSortOrder = 'asc';
-        renderScoreAll();
-    });
-    document.getElementById('subjectFilterAll').addEventListener('change', (e) => {
-        AdminState.globalSubjectFilter = e.target.value;
-        // 根据科目类型自动调整排序方向
-        if (AdminState.globalSubjectFilter === '总分') {
-            AdminState.currentSortField = 'totalScore';
-            AdminState.currentSortOrder = 'desc';
-        } else {
-            AdminState.currentSortField = 'className';
-            AdminState.currentSortOrder = 'asc';
-        }
-        renderScoreAll();
-    });
+}
+
+// 绑定筛选栏事件（因为重复渲染需要解绑/重绑）
+function bindFilterBarEvents() {
+    const examSelect = document.getElementById('examSelect');
+    const classFilter = document.getElementById('classFilterAll');
+    const subjectFilter = document.getElementById('subjectFilterAll');
+    const sortField = document.getElementById('sortFieldSelect');
+    const sortOrderBtn = document.getElementById('toggleSortOrderBtn');
+    
+    if (examSelect) examSelect.value = AdminState.currentExamDate || '';
+    if (classFilter) classFilter.value = AdminState.globalClassFilter;
+    if (subjectFilter) subjectFilter.value = AdminState.globalSubjectFilter;
+    if (sortOrderBtn) sortOrderBtn.textContent = AdminState.currentSortOrder === 'asc' ? '↑' : '↓';
 }
 
 // ---------- 总览看板 ----------
-function renderDashboard() {
-    const totalClasses = AdminState.classes.length;
-    const totalStudents = AdminState.classes.reduce((sum, c) => sum + (c.studentCount || 0), 0);
-    const totalNotices = AdminState.allNotices.length;
-    const latestNotices = [...AdminState.allNotices]
+async function renderDashboard() {
+    const section = document.getElementById('dashboardSection');
+    
+    // 骨架屏
+    section.innerHTML = AdminRender.dashboardSkeleton();
+    
+    // 确保数据已加载（如果已加载可跳过，但为保险起见重新获取最新统计）
+    // 注意：基础数据在 init 时已加载，这里只需刷新可能变化的数据
+    const [classes, notices, logs] = await Promise.all([
+        API.admin.getClasses(),
+        API.admin.getNotices(),
+        API.admin.getLogs()
+    ]);
+    AdminState.classes = classes;
+    AdminState.allNotices = notices;
+    AdminState.systemLogs = logs;
+    
+    // 真实渲染
+    const totalClasses = classes.length;
+    const totalStudents = classes.reduce((sum, c) => sum + (c.studentCount || 0), 0);
+    const totalNotices = notices.length;
+    const latestNotices = [...notices]
         .sort((a, b) => new Date(b.publishTime) - new Date(a.publishTime))
         .slice(0, 3);
     
     const noticeHtml = latestNotices.map(notice => {
         const isNew = isNewNotice(notice.publishTime);
         return `
-            <div class="recent-notice-item" style="cursor:pointer; padding:12px; border-bottom:1px solid #ddd;" data-notice-id="${notice.id}">
-                <div style="display:flex; justify-content:space-between;">
-                    <strong>${escapeHtml(notice.title)}</strong>
-                    ${isNew ? '<span style="background:#ffc107; padding:2px 6px; border-radius:4px;">新</span>' : ''}
+            <div class="recent-notice-item ${isNew ? 'unread' : ''}" data-id="${notice.id}">
+                <div class="notice-summary">
+                    <span class="title">
+                        ${escapeHtml(notice.title)}
+                        ${isNew ? '<span class="notice-badge-sm" style="margin-left:8px;">新</span>' : ''}
+                    </span>
+                    <span class="meta">${escapeHtml(notice.className)} · ${formatDate(notice.publishTime)}</span>
+                    <span class="expand-icon">▼</span>
                 </div>
-                <div style="font-size:12px; color:#666;">${escapeHtml(notice.className)} · ${formatDateTime(notice.publishTime)}</div>
-                <div style="font-size:13px; margin-top:4px;">${escapeHtml(notice.content.substring(0, 50))}…</div>
+                <div class="notice-detail">
+                    <div class="notice-content">${escapeHtml(notice.content)}</div>
+                </div>
             </div>
         `;
     }).join('');
     
-    const logRows = AdminState.systemLogs.slice(0, 3).map(l => `
+    const logRows = logs.slice(0, 3).map(l => `
         <tr><td>${escapeHtml(l.operator)}</td><td>${escapeHtml(l.operationType)}</td><td>${escapeHtml(l.content)}</td><td>${formatDateTime(l.operateTime)}</td></tr>
     `).join('');
     
-    const html = `
+    section.innerHTML = `
         <h3>教务总览看板</h3>
         <p>欢迎 ${escapeHtml(AdminState.currentAdmin?.name || '')}，全校教学数据实时监控。</p>
         <div class="stats-grid">
@@ -138,7 +174,6 @@ function renderDashboard() {
             <div style="text-align:right;"><a href="#" data-nav="systemLog" class="nav-link">查看全部日志 →</a></div>
         </div>
     `;
-    document.getElementById('dashboardSection').innerHTML = html;
     
     document.querySelectorAll('#dashboardSection .recent-notice-item').forEach(el => {
         el.addEventListener('click', () => switchSection('noticeAll'));
@@ -147,21 +182,28 @@ function renderDashboard() {
 
 // ---------- 班级管理 ----------
 async function renderClassManage() {
+    const section = document.getElementById('classManageSection');
+    section.innerHTML = AdminRender.classManageSkeleton();
     // 刷新班级数据
     const classes = await API.admin.getClasses();
     AdminState.classes = classes;
     
     // 获取每个班级的学生
     for (let c of AdminState.classes) {
-        const students = await API.request(`/admin/classes/${c.id}/students`);
-        c.students = students;
-        c.studentCount = students.length;
+        try {
+            const students = await API.request(`/admin/classes/${c.id}/students`);
+            c.students = Array.isArray(students) ? students : [];
+        } catch (e) {
+            console.warn(`获取班级 ${c.id} 学生失败:`, e);
+            c.students = [];
+        }
+        c.studentCount = c.students.length;
     }
     
     let classListHtml = '';
     for (let c of AdminState.classes) {
         let studentListHtml = '';
-        for (let s of c.students) {
+        for (let s of (c.students || [])) {
             studentListHtml += `
                 <div class="student-item" style="display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid #eee;">
                     <span>${escapeHtml(s.name)} (${escapeHtml(s.studentId)})</span>
@@ -224,8 +266,12 @@ async function renderClassManage() {
         sel.addEventListener('change', async (e) => {
             const classId = sel.dataset.classid;
             const teacherId = e.target.value || null;
-            await API.admin.bindTeacher(classId, teacherId);
-            renderClassManage();
+            try {
+                await API.admin.bindTeacher(classId, teacherId);
+                renderClassManage();
+            } catch (err) {
+                alert(err.message || '绑定失败');
+}
         });
     });
     
@@ -234,6 +280,7 @@ async function renderClassManage() {
             if (confirm('确定删除该班级吗？所有学生关联将被移除。')) {
                 await API.admin.deleteClass(btn.dataset.id);
                 renderClassManage();
+                renderDashboard();
             }
         });
     });
@@ -284,18 +331,27 @@ function openAddTeacherModal() {
 
 // ---------- 全量通知 ----------
 function renderNoticeAll() {
+    const section = document.getElementById('noticeAllSection');
+    section.innerHTML = AdminRender.noticeAllSkeleton();
+    
     const sorted = [...AdminState.allNotices].sort((a, b) => new Date(b.publishTime) - new Date(a.publishTime));
+    
     const cards = sorted.map(notice => {
-        const isNew = isNewNotice(notice.publishTime);
+    const isNew = isNewNotice(notice.publishTime);
         return `
-            <div class="notice-item ${isNew ? 'unread' : ''}">
-                <div class="notice-title">
-                    <strong>${escapeHtml(notice.title)}</strong>
-                    <span class="badge">${escapeHtml(notice.className)}</span>
-                    ${isNew ? '<span class="notice-badge-sm">新</span>' : ''}
+            <div class="notice-item ${isNew ? 'unread' : ''}" data-id="${notice.id}">
+                <div class="notice-summary">
+                    <span class="title">
+                        ${escapeHtml(notice.title)}
+                        ${isNew ? '<span class="notice-badge-sm" style="margin-left:8px;">新</span>' : ''}
+                    </span>
+                    <span class="meta">${escapeHtml(notice.className)} · ${formatDate(notice.publishTime)}</span>
+                    <span class="expand-icon">▼</span>
                 </div>
-                <div class="notice-content">${escapeHtml(notice.content)}</div>
-                <div class="notice-time">${formatDateTime(notice.publishTime)} | 发布人：${escapeHtml(notice.teacher_name)} | 已读 ${notice.readCount}/${notice.totalStu}</div>
+                <div class="notice-detail">
+                    <div class="notice-content">${escapeHtml(notice.content)}</div>
+                    <div class="notice-time">发布人：${escapeHtml(notice.teacher_name)} | 已读 ${notice.readCount}/${notice.totalStu}</div>
+                </div>
             </div>
         `;
     }).join('');
@@ -309,18 +365,28 @@ function renderNoticeAll() {
         <div class="filter-bar">${filterHtml}</div>
         <div id="noticeListContainer">${cards || '<div class="empty-tip">暂无通知</div>'}</div>
     `;
-    document.getElementById('noticeAllSection').innerHTML = html;
+    section.innerHTML = html;
     
+    // 筛选事件
     document.getElementById('classFilterNotice')?.addEventListener('change', (e) => {
         const val = e.target.value;
         const filtered = val === 'all' ? sorted : sorted.filter(n => n.className === val);
         const filteredHtml = filtered.map(notice => {
             const isNew = isNewNotice(notice.publishTime);
             return `
-                <div class="notice-item ${isNew ? 'unread' : ''}">
-                    <div class="notice-title"><strong>${escapeHtml(notice.title)}</strong><span class="badge">${escapeHtml(notice.className)}</span>${isNew ? '<span class="notice-badge-sm">新</span>' : ''}</div>
-                    <div class="notice-content">${escapeHtml(notice.content)}</div>
-                    <div class="notice-time">${formatDateTime(notice.publishTime)} | 发布人：${escapeHtml(notice.teacher_name)} | 已读 ${notice.readCount}/${notice.totalStu}</div>
+                <div class="notice-item ${isNew ? 'unread' : ''}" data-id="${notice.id}">
+                    <div class="notice-summary">
+                        <span class="title">
+                            ${escapeHtml(notice.title)}
+                            ${isNew ? '<span class="notice-badge-sm" style="margin-left:8px;">新</span>' : ''}
+                        </span>
+                        <span class="meta">${escapeHtml(notice.className)} · ${formatDate(notice.publishTime)}</span>
+                        <span class="expand-icon">▼</span>
+                    </div>
+                    <div class="notice-detail">
+                        <div class="notice-content">${escapeHtml(notice.content)}</div>
+                        <div class="notice-time">发布人：${escapeHtml(notice.teacher_name)} | 已读 ${notice.readCount}/${notice.totalStu}</div>
+                    </div>
                 </div>
             `;
         }).join('');
@@ -330,6 +396,8 @@ function renderNoticeAll() {
 
 // ---------- 系统日志 ----------
 function renderSystemLog() {
+    const section = document.getElementById('systemLogSection');
+    section.innerHTML = AdminRender.systemLogSkeleton();
     const logs = AdminState.systemLogs;
     const totalPages = Math.ceil(logs.length / AdminState.logsPerPage);
     const start = (AdminState.currentLogPage - 1) * AdminState.logsPerPage;
@@ -383,20 +451,25 @@ async function switchSection(sectionId) {
 
 // ---------- 全局事件绑定 ----------
 function bindGlobalEvents() {
-    // 导航
-    document.addEventListener('click', async (e) => {
+    // 导航链接点击
+    document.addEventListener('click', (e) => {
+        // 侧边栏和页面内导航
         if (e.target.matches('.sidebar-menu a, .nav-link')) {
             e.preventDefault();
             const nav = e.target.dataset.nav;
             if (nav) switchSection(nav);
         }
-        // 成绩操作
+
+        // 成绩页面操作
         if (currentSection === 'scoreAll') {
             if (e.target.id === 'searchBtn') {
-                AdminState.currentSearchKeyword = document.getElementById('searchInput').value;
-                renderScoreAll();
+                const input = document.getElementById('searchInput');
+                if (input) {
+                    AdminState.currentSearchKeyword = input.value;
+                    renderScoreAll();
+                }
             } else if (e.target.classList.contains('edit-score-btn')) {
-                const id = e.target.dataset.id;
+                const id = parseInt(e.target.dataset.id);
                 AdminState.currentEditScoreId = id;
                 document.getElementById('editScoreStudentName').value = e.target.dataset.name;
                 document.getElementById('editScoreSubject').value = AdminState.globalSubjectFilter;
@@ -404,126 +477,83 @@ function bindGlobalEvents() {
                 document.getElementById('editScoreAdminModal').style.display = 'flex';
             } else if (e.target.classList.contains('delete-score-btn')) {
                 if (confirm('确定删除？')) {
-                    await API.admin.deleteScore(e.target.dataset.id);
-                    renderScoreAll();
+                    API.admin.deleteScore(e.target.dataset.id).then(() => renderScoreAll());
                 }
             } else if (e.target.id === 'exportAllBtn') {
                 exportCSV();
             } else if (e.target.id === 'addScoreAllBtn') {
                 openAddScoreModal();
+            } else if (e.target.id === 'batchImportAllBtn') {
+                const input = document.createElement('input');
+                input.type = 'file';
+                input.accept = '.csv';
+                input.onchange = handleFileSelect;
+                input.click();
+            } else if (e.target.id === 'downloadTemplateBtn') {
+                const csv = '班级,姓名,学号,科目,成绩,考试日期(可选)\n高一1班,张三,2024001,数学,85,2026-04-12';
+                const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = '成绩导入模板.csv';
+                a.click();
             }
         }
-        // 模态框关闭（遮罩点击）
+
+        // 模态框遮罩关闭
         if (e.target.classList.contains('modal-mask')) {
             e.target.style.display = 'none';
         }
-        // 搜索框回车
-        document.getElementById('searchInput')?.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                AdminState.currentSearchKeyword = e.target.value;
-                if (currentSection === 'scoreAll') renderScoreAll();
-            }
-        });
-
-        // 下载模板
-        document.getElementById('downloadTemplateBtn')?.addEventListener('click', () => {
-            const csv = '班级,姓名,学号,科目,成绩,考试日期(可选)\n高一1班,张三,2024001,数学,85,2026-04-12';
-            const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
-            a.download = '成绩导入模板.csv';
-            a.click();
-        });
-
-        // 批量导入（增强版，带预览和错误统计）
-        document.getElementById('batchImportAllBtn')?.addEventListener('click', () => {
-            const input = document.createElement('input');
-            input.type = 'file';
-            input.accept = '.csv';
-            input.onchange = handleBatchImport;
-            input.click();
-        });
-    });
-    
-    // 批量导入按钮
-    document.getElementById('batchImportAllBtn')?.addEventListener('click', () => {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.accept = '.csv';
-        input.onchange = handleFileSelect;
-        input.click();
     });
 
-    document.addEventListener('change', async (e) => {
-        if (currentSection === 'scoreAll') {
-            if (e.target.id === 'classFilterAll') {
-                AdminState.globalClassFilter = e.target.value;
-                renderScoreAll();
-            } else if (e.target.id === 'subjectFilterAll') {
-                AdminState.globalSubjectFilter = e.target.value;
-                renderScoreAll();
-            } else if (e.target.id === 'examSelect') {
-                AdminState.currentExamDate = e.target.value;
+    // 搜索框回车
+    document.addEventListener('keypress', (e) => {
+        if (e.target.id === 'searchInput' && e.key === 'Enter') {
+            AdminState.currentSearchKeyword = e.target.value;
+            if (currentSection === 'scoreAll') renderScoreAll();
+        }
+    });
+
+    // 下拉筛选和排序字段变更（事件委托）
+    document.addEventListener('change', (e) => {
+        if (currentSection !== 'scoreAll') return;
+
+        const target = e.target;
+        if (target.id === 'classFilterAll') {
+            AdminState.globalClassFilter = target.value;
+            renderScoreAll();
+        } else if (target.id === 'subjectFilterAll') {
+            AdminState.globalSubjectFilter = target.value;
+            // 自动调整默认排序方向
+            if (AdminState.globalSubjectFilter === '总分') {
+                AdminState.currentSortField = 'totalScore';
+                AdminState.currentSortOrder = 'desc';
+            } else {
                 AdminState.currentSortField = 'className';
-                renderScoreAll();
-            } else if (e.target.id === 'sortFieldSelect') {
-                AdminState.currentSortField = e.target.value;
-                renderScoreAll();
+                AdminState.currentSortOrder = 'asc';
             }
+            renderScoreAll();
+        } else if (target.id === 'examSelect') {
+            AdminState.currentExamDate = target.value;
+            AdminState.currentSortField = 'className';
+            AdminState.currentSortOrder = 'asc';
+            renderScoreAll();
+        } else if (target.id === 'sortFieldSelect') {
+            AdminState.currentSortField = target.value;
+            renderScoreAll();
         }
     });
-    
-    document.getElementById('toggleSortOrderBtn')?.addEventListener('click', () => {
-        AdminState.currentSortOrder = AdminState.currentSortOrder === 'asc' ? 'desc' : 'asc';
-        if (currentSection === 'scoreAll') renderScoreAll();
-    });
-    
-    // 模态框按钮
-    document.getElementById('confirmAddClassBtn')?.addEventListener('click', async () => {
-        const name = document.getElementById('addClassName').value.trim();
-        const gradeId = document.getElementById('addClassGradeId').value;
-        if (name) {
-            await API.admin.addClass(name, gradeId);
-            closeModal('addClassModal');
-            renderClassManage();
+
+    // 排序方向切换按钮
+    document.addEventListener('click', (e) => {
+        if (e.target.id === 'toggleSortOrderBtn' && currentSection === 'scoreAll') {
+            AdminState.currentSortOrder = AdminState.currentSortOrder === 'asc' ? 'desc' : 'asc';
+            renderScoreAll();
         }
-    });
-    
-    document.getElementById('confirmEditClassBtn')?.addEventListener('click', async () => {
-        const name = document.getElementById('editClassName').value.trim();
-        const gradeId = document.getElementById('editClassGradeId').value;
-        if (name) {
-            await API.admin.updateClass(AdminState.currentEditClassId, name, gradeId);
-            closeModal('editClassModal');
-            renderClassManage();
+        // 通知卡片展开/收起
+        if (e.target.closest('.notice-summary')) {
+            const noticeItem = e.target.closest('.notice-item');
+            noticeItem.classList.toggle('expanded');
         }
-    });
-    
-    document.getElementById('confirmAddStudentBtn')?.addEventListener('click', async () => {
-        const name = document.getElementById('studentName').value.trim();
-        const studentId = document.getElementById('studentId').value.trim();
-        if (name && studentId) {
-            await API.admin.addStudent(AdminState.currentAddStudentClassId, name, studentId);
-            closeModal('addStudentModal');
-            renderClassManage();
-        }
-    });
-    
-    document.getElementById('confirmAddTeacherBtn')?.addEventListener('click', async () => {
-        const name = document.getElementById('teacherName').value.trim();
-        if (name) {
-            await API.admin.addTeacher(name);
-            AdminState.allTeachers = await API.admin.getTeachers();
-            closeModal('addTeacherModal');
-            renderClassManage();
-        }
-    });
-    
-    document.getElementById('confirmAddScoreBtn')?.addEventListener('click', confirmAddScore);
-    document.getElementById('confirmEditScoreAdminBtn')?.addEventListener('click', confirmEditScore);
-    
-    document.querySelectorAll('.modal-mask').forEach(m => {
-        m.addEventListener('click', (e) => { if (e.target === m) m.style.display = 'none'; });
     });
 }
 
@@ -532,8 +562,36 @@ function closeModal(id) { document.getElementById(id).style.display = 'none'; }
 async function openAddScoreModal() {
     const classSelect = document.getElementById('addScoreClass');
     classSelect.innerHTML = '<option value="">请选择班级</option>';
-    AdminState.classes.forEach(c => { classSelect.innerHTML += `<option value="${escapeHtml(c.className)}">${escapeHtml(c.className)}</option>`; });
+    AdminState.classes.forEach(c => {
+        classSelect.innerHTML += `<option value="${escapeHtml(c.className)}">${escapeHtml(c.className)}</option>`;
+    });
+    
+    // 科目输入框预填当前筛选科目（总分除外）
     document.getElementById('addScoreSubject').value = AdminState.globalSubjectFilter === '总分' ? '' : AdminState.globalSubjectFilter;
+    
+    const datalist = document.getElementById('subjectOptions');
+    datalist.innerHTML = '';
+    AdminState.allSubjects.forEach(sub => {
+        if (sub !== '总分') {
+            datalist.innerHTML += `<option value="${escapeHtml(sub)}">`;
+        }
+    });
+
+    // 填充考试批次下拉框
+    const examSelect = document.getElementById('addScoreExamDate');
+    examSelect.innerHTML = '<option value="">默认(当天)</option>';
+    AdminState.examList.forEach(dateStr => {
+        examSelect.innerHTML += `<option value="${dateStr}">${dateStr}</option>`;
+    });
+    // 如果当前有选中的考试批次，则默认选中
+    if (AdminState.currentExamDate) {
+        examSelect.value = AdminState.currentExamDate;
+    }
+    
+    // 清空其他字段
+    document.getElementById('addScoreStudentName').value = '';
+    document.getElementById('addScoreStudentId').value = '';
+    document.getElementById('addScoreValue').value = '';
     document.getElementById('addScoreModal').style.display = 'flex';
 }
 
@@ -570,18 +628,25 @@ async function confirmAddScore() {
     await API.admin.addScore({ className, studentName, studentId, subject, score, examDate });
     closeModal('addScoreModal');
     renderScoreAll();
+    if (currentSection === 'dashboard') renderDashboard();
 }
 
 async function confirmEditScore() {
-    const newScore = parseFloat(document.getElementById('editScoreValue').value);
+    const newScore = parseFloat(Number(document.getElementById('editScoreValue').value).toFixed(1));
     const id = AdminState.currentEditScoreId;
+    
     const scoreItem = AdminState.allScores.find(s => s.id === id);
-    if (!scoreItem) return;
+    if (!scoreItem) {
+        alert("成绩记录不存在");
+        return;
+    }
+    
     if (scoreItem.subject === '总分') {
-        alert('总分不可编辑');
+        alert("总分由系统自动计算，不可手动修改");
         closeModal('editScoreAdminModal');
         return;
     }
+    
     try {
         const fullRes = await API.request('/admin/fullmark', {
             method: 'POST',
@@ -589,14 +654,76 @@ async function confirmEditScore() {
             body: JSON.stringify({ subject: scoreItem.subject })
         });
         const fullMark = fullRes.full_mark || 100;
-        if (newScore < 0 || newScore > fullMark) {
-            alert(`成绩必须在 0-${fullMark} 之间`);
+        if (isNaN(newScore) || newScore < 0 || newScore > fullMark) {
+            alert(`请输入有效的成绩 (0-${fullMark})`);
             return;
         }
-    } catch (e) {}
-    await API.admin.updateScore(id, newScore);
-    closeModal('editScoreAdminModal');
-    renderScoreAll();
+    } catch (e) {
+        // 降级：如果满分接口失败，仍允许提交（但可加一个弱校验）
+        console.warn('获取满分失败，跳过范围校验');
+    }
+    
+    const result = await API.admin.updateScore(id, newScore);
+    if (result.success) {
+        alert("成绩已更新");
+        closeModal('editScoreAdminModal');
+        
+        const freshScores = await API.admin.getScores(AdminState.currentExamDate);
+        AdminState.allScores = freshScores.map(s => ({ ...s, score: parseFloat(s.score) || 0 }));
+        
+        const subjectSet = new Set();
+        AdminState.allScores.forEach(s => subjectSet.add(s.subject));
+        subjectSet.add('总分');
+        AdminState.allSubjects = Array.from(subjectSet).sort();
+        
+        await renderScoreAll();
+        
+        if (currentSection === 'dashboard') {
+            renderDashboard();
+        }
+    } else {
+        alert(result.message || "修改失败");
+    }
+}
+
+async function confirmAddClass() {
+    const name = document.getElementById('addClassName').value.trim();
+    const gradeId = document.getElementById('addClassGradeId').value;
+    if (name) {
+        await API.admin.addClass(name, gradeId);
+        closeModal('addClassModal');
+        renderClassManage();
+    }
+}
+
+async function confirmEditClass() {
+    const name = document.getElementById('editClassName').value.trim();
+    const gradeId = document.getElementById('editClassGradeId').value;
+    if (name) {
+        await API.admin.updateClass(AdminState.currentEditClassId, name, gradeId);
+        closeModal('editClassModal');
+        renderClassManage();
+    }
+}
+
+async function confirmAddStudent() {
+    const name = document.getElementById('studentName').value.trim();
+    const studentId = document.getElementById('studentId').value.trim();
+    if (name && studentId) {
+        await API.admin.addStudent(AdminState.currentAddStudentClassId, name, studentId);
+        closeModal('addStudentModal');
+        renderClassManage();
+    }
+}
+
+async function confirmAddTeacher() {
+    const name = document.getElementById('teacherName').value.trim();
+    if (name) {
+        await API.admin.addTeacher(name);
+        AdminState.allTeachers = await API.admin.getTeachers();
+        closeModal('addTeacherModal');
+        renderClassManage();
+    }
 }
 
 function updateSortButtonText() {
@@ -619,7 +746,7 @@ function exportCSV() {
             csv += `${item.studentName},${item.studentId},`;
             if (!hasExamDate) csv += `${formatDate(item.exam_date)},`;
             csv += `${item.score}`;
-            if (hasExamDate) csv += `,${item.classRank || ''},${item.classRankInClass || ''}`;
+            if (hasExamDate) csv += `,${item.class_rank || ''},${item.class_rank_in_class || ''}`;
             csv += '\n';
         } else {
             csv += `${item.className},${item.studentName},${item.studentId},`;
@@ -635,6 +762,62 @@ function exportCSV() {
     a.href = URL.createObjectURL(blob);
     a.download = `成绩_${AdminState.globalSubjectFilter}_${AdminState.currentExamDate || '所有批次'}.csv`;
     a.click();
+}
+
+// 批量导入文件选择处理
+async function handleFileSelect(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+        const csv = ev.target.result;
+        await importFromCSV(csv);
+    };
+    reader.readAsText(file, 'UTF-8');
+}
+
+async function importFromCSV(csvText) {
+    const lines = csvText.trim().split('\n');
+    if (lines.length < 2) { alert('CSV 至少需要表头和一行数据'); return; }
+    const headers = lines[0].split(',').map(h => h.trim());
+    const idx = {
+        class: headers.indexOf('班级'),
+        name: headers.indexOf('姓名'),
+        id: headers.indexOf('学号'),
+        subject: headers.indexOf('科目'),
+        score: headers.indexOf('成绩'),
+        date: headers.indexOf('考试日期')
+    };
+    if (idx.class === -1 || idx.name === -1 || idx.id === -1 || idx.subject === -1 || idx.score === -1) {
+        alert('表头必须包含：班级,姓名,学号,科目,成绩');
+        return;
+    }
+    let success = 0, fail = 0;
+    const errors = [];
+    for (let i = 1; i < lines.length; i++) {
+        const cols = lines[i].split(',').map(c => c.trim());
+        if (cols.length < 5) continue;
+        const className = cols[idx.class];
+        const studentName = cols[idx.name];
+        const studentId = cols[idx.id];
+        const subject = cols[idx.subject];
+        const score = parseFloat(cols[idx.score]);
+        const examDate = cols[idx.date] || AdminState.currentExamDate || '';
+        if (!className || !studentName || !studentId || !subject || isNaN(score)) {
+            fail++;
+            errors.push(`第${i+1}行：数据不完整`);
+            continue;
+        }
+        try {
+            await API.admin.addScore({ className, studentName, studentId, subject, score, examDate });
+            success++;
+        } catch (err) {
+            fail++;
+            errors.push(`第${i+1}行：${err.message || '添加失败'}`);
+        }
+    }
+    alert(`导入完成：成功 ${success} 条，失败 ${fail} 条。${errors.length ? '\n错误详情：\n' + errors.slice(0,5).join('\n') : ''}`);
+    await renderScoreAll();
 }
 
 // 新增批量导入处理函数（放在文件末尾）
@@ -689,6 +872,40 @@ async function handleBatchImport(e) {
     reader.readAsText(file, 'UTF-8');
 }
 
+// ---------- 绑定所有模态框事件（静态按钮）----------
+function bindModalEvents() {
+    // 新增班级
+    document.getElementById('cancelAddClassBtn')?.addEventListener('click', () => closeModal('addClassModal'));
+    document.getElementById('confirmAddClassBtn')?.addEventListener('click', confirmAddClass);
+    
+    // 编辑班级
+    document.getElementById('cancelEditClassBtn')?.addEventListener('click', () => closeModal('editClassModal'));
+    document.getElementById('confirmEditClassBtn')?.addEventListener('click', confirmEditClass);
+    
+    // 添加学生
+    document.getElementById('cancelAddStudentBtn')?.addEventListener('click', () => closeModal('addStudentModal'));
+    document.getElementById('confirmAddStudentBtn')?.addEventListener('click', confirmAddStudent);
+    
+    // 添加教师
+    document.getElementById('cancelAddTeacherBtn')?.addEventListener('click', () => closeModal('addTeacherModal'));
+    document.getElementById('confirmAddTeacherBtn')?.addEventListener('click', confirmAddTeacher);
+    
+    // 添加成绩
+    document.getElementById('cancelAddScoreBtn')?.addEventListener('click', () => closeModal('addScoreModal'));
+    document.getElementById('confirmAddScoreBtn')?.addEventListener('click', confirmAddScore);
+    
+    // 编辑成绩
+    document.getElementById('cancelEditScoreAdminBtn')?.addEventListener('click', () => closeModal('editScoreAdminModal'));
+    document.getElementById('confirmEditScoreAdminBtn')?.addEventListener('click', confirmEditScore);
+    
+    // 遮罩层点击关闭
+    document.querySelectorAll('.modal-mask').forEach(m => {
+        m.addEventListener('click', (e) => {
+            if (e.target === m) m.style.display = 'none';
+        });
+    });
+}
+
 // ---------- 初始化 ----------
 async function init() {
     await loadBaseData();
@@ -696,6 +913,7 @@ async function init() {
     document.querySelector('.user-avatar').innerText = header.avatar;
     document.querySelector('.user-info span').innerText = header.name;
     bindGlobalEvents();
+    bindModalEvents();
     switchSection('dashboard');
     
     // 退出登录

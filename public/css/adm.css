@@ -17,6 +17,11 @@
     --border: #e4e7ed;
     --sidebar-width: 240px;
     --header-height: 60px;
+
+    --primary-rgb: 64, 150, 255;
+    --warning-rgb: 230, 162, 60;
+    --danger-rgb: 245, 108, 108;
+    --gray-rgb: 144, 147, 153;
 }
 
 body {
@@ -76,6 +81,21 @@ button.btn-sm {
     font-size: 14px;
 }
 
+/* 奇偶行区分 + 悬停效果 */
+.table tbody tr:nth-child(even) {
+    background-color: rgba(0, 0, 0, 0.02);
+}
+
+.table tbody tr:hover {
+    background-color: rgba(var(--primary-rgb), 0.05) !important;
+    transition: background 0.2s;
+}
+
+/* 如果某行有特殊状态（如错误行），保持高优先级 */
+.table tbody tr.error-row {
+    background: #fee2e2 !important;
+}
+
 .table th,
 .table td {
     padding: 12px 8px;
@@ -115,7 +135,7 @@ button.btn-sm {
     transform: translateY(-2px);
 }
 .notice-item.unread {
-    background: rgba(230,162,60,0.05);
+    background: rgba(var(--warning-rgb), 0.05);
     border-left: 4px solid var(--warning);
 }
 .notice-title {
@@ -182,7 +202,7 @@ button.btn-sm {
 
 .sidebar-menu li a:hover,
 .sidebar-menu li a.active {
-    background: rgba(64, 150, 255, 0.1);
+    background: rgba(var(--primary-rgb), 0.1);
     color: var(--primary);
     border-left-color: var(--primary);
 }
@@ -611,3 +631,105 @@ hr {
     opacity: 0.8;
     text-decoration: underline;
 }
+
+/* ========== 骨架屏样式 ========== */
+.skeleton {
+    background: linear-gradient(
+        90deg,
+        #f0f0f0 25%,
+        #e0e0e0 50%,
+        #f0f0f0 75%
+    );
+    background-size: 200% 100%;
+    animation: skeleton-loading 1.5s infinite;
+    border-radius: 4px;
+}
+
+@keyframes skeleton-loading {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+/* 骨架表格容器（模拟真实表格） */
+.skeleton-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.skeleton-row {
+    display: flex;
+    gap: 12px;
+    padding: 12px 8px;
+    border-bottom: 1px solid var(--border);
+}
+
+.skeleton-cell {
+    height: 20px;
+    border-radius: 4px;
+    flex: 1;
+}
+
+.skeleton-cell.short { flex: 0.5; }
+.skeleton-cell.medium { flex: 2; }
+
+/* 骨架统计卡片 */
+.skeleton-stats {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 16px;
+}
+.skeleton-stat-card {
+    flex: 1;
+    height: 80px;
+    border-radius: 16px;
+}
+
+/* 通知样式 */
+
+/* 未读通知：黄色背景 + 橙色左边框（与原有风格一致） */
+.notice-item.unread {
+    background: rgba(var(--warning-rgb), 0.08) !important;
+    border-left: 4px solid var(--warning) !important;
+    position: relative;
+}
+
+/* 已读通知置灰（保留） */
+.notice-item.read {
+    opacity: 0.7;
+    background: var(--gray-light) !important;
+    border-left-color: transparent !important;
+}
+
+/* 已读置灰 */
+.notice-item.read {
+    opacity: 0.7;
+    background: var(--gray-light) !important;
+}
+.notice-item.read .notice-title {
+    color: var(--gray);
+}
+
+/* 折叠动画 */
+.notice-summary {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    cursor: pointer;
+    padding: 12px 12px 12px 28px;
+}
+.notice-summary .title { flex: 3; font-weight: 600; }
+.notice-summary .meta { flex: 2; font-size: 12px; color: var(--gray); }
+.notice-summary .expand-icon { margin-left: auto; transition: transform 0.2s; }
+
+.notice-detail {
+    max-height: 0;
+    overflow: hidden;
+    padding: 0 12px 0 28px;
+    transition: max-height 0.3s, padding 0.3s;
+}
+.notice-item.expanded .notice-detail {
+    max-height: 200px;
+    padding: 12px 12px 12px 28px;
+    border-top: 1px solid var(--border);
+}
+.notice-item.expanded .expand-icon { transform: rotate(180deg); }
