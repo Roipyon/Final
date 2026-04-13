@@ -154,12 +154,17 @@ async function renderNoticeModule() {
     section.innerHTML = TeacherRender.noticeSkeleton();
 
     const notices = TeacherState.notices;
+
+    const formHtml = new FormBuilder()
+        .addInput('newTitle', '标题', 'text', '通知标题')
+        .addTextarea('newContent', '内容', '通知内容')
+        .render();
+
     const html = `
         <h3>班级通知管理</h3>
         <div class="card" style="background:#f9f9f9; padding:16px;">
             <h4>发布新通知</h4>
-            <div class="form-group"><label>标题</label><input type="text" id="newTitle" placeholder="通知标题"></div>
-            <div class="form-group"><label>内容</label><textarea id="newContent" rows="4"></textarea></div>
+            ${formHtml}
             <button id="publishNoticeBtn" class="btn-primary">发布通知</button>
         </div>
         <h4 style="margin-top:24px;">已发布通知</h4>
@@ -248,19 +253,22 @@ async function renderLogModule() {
     const logs = data.logs;
     const totalPages = Math.ceil(data.total / TeacherState.logsPerPage);
     
+    const tableHtml = new TableBuilder()
+        .setData(logs)
+        .addColumn('user_name', '操作人')
+        .addColumn('operation_type', '类型')
+        .addColumn('operation_content', '内容')
+        .addColumn('created_at', '时间', val => formatDateTime(val))
+        .render();
+    
+    const paginationHtml = Array.from({ length: totalPages }, (_, i) => `
+        <button class="page-btn ${i+1 === TeacherState.currentLogPage ? 'active-page' : ''}" data-page="${i+1}">${i+1}</button>
+    `).join('');
+
     const html = `
         <h3>班级操作日志</h3>
-        <table class="table">
-            <thead><tr><th>操作人</th><th>类型</th><th>内容</th><th>时间</th></tr></thead>
-            <tbody>
-                ${logs.map(l => `<tr><td>${escapeHtml(l.user_name)}</td><td>${escapeHtml(l.operation_type)}</td><td>${escapeHtml(l.operation_content)}</td><td>${formatDateTime(l.created_at)}</td></tr>`).join('')}
-            </tbody>
-        </table>
-        <div class="pagination">
-            ${Array.from({length: totalPages}, (_, i) => `
-                <button class="page-btn ${i+1 === TeacherState.currentLogPage ? 'active-page' : ''}" data-page="${i+1}">${i+1}</button>
-            `).join('')}
-        </div>
+        ${tableHtml}
+        <div class="pagination">${paginationHtml}</div>
     `;
     document.getElementById('logSection').innerHTML = html;
     

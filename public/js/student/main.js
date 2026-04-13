@@ -85,10 +85,7 @@ function renderHomeModule() {
             <div class="summary-card"><div class="summary-number">${total.totalRank}</div><div>班级排名</div></div>
         </div>
         <h4>近期成绩亮点</h4>
-        <table class="table">
-            <thead><tr><th>科目</th><th>成绩</th><th>班级均分</th><th>对比</th></tr></thead>
-            <tbody>${StudentRender.scoreHighlightTable(StudentState.personalScores)}</tbody>
-        </table>
+        ${StudentRender.scoreHighlightTable(StudentState.personalScores)}
         <div style="text-align:right;"><a href="#" data-nav="score" class="nav-link">查看全部成绩 →</a></div>
         
         <h4 style="margin-top:24px;">最新班级通知 <span class="badge unread-badge">${unread}条未读</span></h4>
@@ -143,10 +140,7 @@ async function renderScoreModule() {
                 <select id="subjectFilterSelect" class="filter-select">${subjectOptions}</select>
             </div>
         </div>
-        <table class="table">
-            <thead><tr><th>科目</th><th>成绩</th><th>班级平均分</th><th>班级排名</th><th>对比均分</th></tr></thead>
-            <tbody>${StudentRender.fullScoreTable(StudentState.personalScores)}</tbody>
-        </table>
+        ${StudentRender.fullScoreTable(StudentState.personalScores)}
         <h4 style="margin-top:24px;">班级统计数据 · ${StudentState.currentSubjectFilter}</h4>
         <div class="stats-grid">
             <div class="stat-card"><div class="stat-value">${stat.avg || '--'}</div><div>平均分</div></div>
@@ -173,7 +167,7 @@ async function renderScoreModule() {
 function renderNoticeModule() {
     const section = document.getElementById('noticeSection');
     section.innerHTML = StudentRender.noticeSkeleton();
-    
+
     const filtered = getFilteredSortedNotices();
     const totalPages = Math.ceil(filtered.length / StudentState.noticesPerPage);
     if (StudentState.currentNoticePage > totalPages) {

@@ -73,47 +73,38 @@ export const AdminRender = {
     },
     
     scoreTable(displayData, isTotal, hasExamDate) {
-        const examDateHeader = hasExamDate ? '' : '<th>考试批次</th>';
-        let header = isTotal ? `
-            <thead><tr>
-                <th>姓名</th><th>学号</th>${examDateHeader}<th>总分</th>
-                ${hasExamDate ? '<th>总分排名</th><th>班级排名</th>' : ''}
-                <th>操作</th>
-            </tr></thead>
-        ` : `
-            <thead><tr>
-                <th>班级</th><th>姓名</th><th>学号</th>${examDateHeader}<th>科目</th><th>成绩</th>
-                ${hasExamDate ? '<th>年级排名</th><th>班级排名</th>' : ''}
-                <th>操作</th>
-            </tr></thead>
-        `;
+        const builder = new TableBuilder().setData(displayData).setEmptyText('暂无成绩');
         
-        const rows = displayData.map(item => {
-            const examCell = hasExamDate ? '' : `<td>${item.exam_date ? formatDate(item.exam_date) : '—'}</td>`;
+        if (!isTotal) builder.addColumn('className', '班级');
+        builder.addColumn('studentName', '姓名')
+            .addColumn('studentId', '学号');
+        
+        if (!hasExamDate) {
+            builder.addColumn('exam_date', '考试批次', val => formatDate(val));
+        }
+        
+        if (!isTotal) builder.addColumn('subject', '科目', () => AdminState.globalSubjectFilter);
+        builder.addColumn('score', isTotal ? '总分' : '成绩');
+        
+        if (hasExamDate) {
+            if (isTotal) {
+                builder.addColumn('class_rank', '总分排名')
+                    .addColumn('class_rank_in_class', '班级排名');
+            } else {
+                builder.addColumn('grade_rank_subject', '年级排名')
+                    .addColumn('class_rank_subject', '班级排名');
+            }
+        }
+        
+        builder.addColumn('id', '操作', (id, row) => {
+            if (isTotal) return '—';
             return `
-                <tr>
-                    ${isTotal ? '' : `<td>${escapeHtml(item.className)}</td>`}
-                    <td>${escapeHtml(item.studentName)}</td>
-                    <td>${escapeHtml(item.studentId)}</td>
-                    ${examCell}
-                    ${isTotal ? '' : `<td>${escapeHtml(AdminState.globalSubjectFilter)}</td>`}
-                    <td>${item.score}</td>
-                    ${isTotal ? `
-                        ${hasExamDate ? `<td>${item.class_rank || '—'}</td><td>${item.class_rank_in_class || '—'}</td>` : ''}
-                    ` : `
-                        ${hasExamDate ? `<td>${item.grade_rank_subject || '—'}</td><td>${item.class_rank_subject || '—'}</td>` : ''}
-                    `}
-                    <td>
-                        ${isTotal ? '—' : `
-                            <button class="btn-sm edit-score-btn" data-id="${item.id}" data-score="${item.score}" data-name="${escapeHtml(item.studentName)}">编辑</button>
-                            <button class="btn-sm btn-danger delete-score-btn" data-id="${item.id}">删除</button>
-                        `}
-                    </td>
-                </tr>
+                <button class="btn-sm edit-score-btn" data-id="${id}" data-score="${row.score}" data-name="${escapeHtml(row.studentName)}">编辑</button>
+                <button class="btn-sm btn-danger delete-score-btn" data-id="${id}">删除</button>
             `;
-        }).join('');
+        });
         
-        return `<table class="table">${header}<tbody>${rows || '<tr><td colspan="8">暂无数据</td></tr>'}</tbody></table>`;
+        return builder.render();
     },
 
     // 在 AdminRender 对象内部添加以下方法（放在 scoreTable 方法后面即可）

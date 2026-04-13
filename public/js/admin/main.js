@@ -541,48 +541,30 @@ function bindGlobalEvents() {
 function closeModal(id) { document.getElementById(id).style.display = 'none'; }
 
 async function openAddScoreModal() {
-    const classSelect = document.getElementById('addScoreClass');
-    classSelect.innerHTML = '<option value="">请选择班级</option>';
-    AdminState.classes.forEach(c => {
-        classSelect.innerHTML += `<option value="${escapeHtml(c.className)}">${escapeHtml(c.className)}</option>`;
-    });
-    
-    // 科目输入框预填当前筛选科目（总分除外）
-    document.getElementById('addScoreSubject').value = AdminState.globalSubjectFilter === '总分' ? '' : AdminState.globalSubjectFilter;
-    
-    const datalist = document.getElementById('subjectOptions');
-    datalist.innerHTML = '';
-    AdminState.allSubjects.forEach(sub => {
-        if (sub !== '总分') {
-            datalist.innerHTML += `<option value="${escapeHtml(sub)}">`;
-        }
-    });
+    // 构建班级下拉选项
+    const classOptions = AdminState.classes.map(c => ({ value: c.className, text: c.className }));
+    const examOptions = AdminState.examList.map(d => ({ value: d, text: d }));
 
-    // 填充考试批次下拉框
-    const examSelect = document.getElementById('addScoreExamDate');
-    examSelect.innerHTML = '<option value="">默认(当天)</option>';
-    AdminState.examList.forEach(dateStr => {
-        examSelect.innerHTML += `<option value="${dateStr}">${dateStr}</option>`;
-    });
-    // 如果当前有选中的考试批次，则默认选中
-    if (AdminState.currentExamDate) {
-        examSelect.value = AdminState.currentExamDate;
-    }
-    
-    // 清空其他字段
-    document.getElementById('addScoreStudentName').value = '';
-    document.getElementById('addScoreStudentId').value = '';
-    document.getElementById('addScoreValue').value = '';
+    const form = new FormBuilder()
+        .addSelect('addScoreClass', '班级', classOptions)
+        .addInput('addScoreStudentName', '姓名', 'text', '学生姓名')
+        .addInput('addScoreStudentId', '学号', 'text', '学号')
+        .addInput('addScoreSubject', '科目', 'text', '如：数学', 
+            AdminState.globalSubjectFilter === '总分' ? '' : AdminState.globalSubjectFilter)
+        .addInput('addScoreValue', '成绩', 'number', '分数')
+        .addSelect('addScoreExamDate', '考试日期', [{ value: '', text: '默认(当天)' }, ...examOptions], 
+            AdminState.currentExamDate || '')
+        .render();
+
+    document.getElementById('addScoreModalBody').innerHTML = form;
     document.getElementById('addScoreModal').style.display = 'flex';
 }
 
 async function confirmAddScore() {
-    const className = document.getElementById('addScoreClass').value;
-    const studentName = document.getElementById('addScoreStudentName').value.trim();
-    const studentId = document.getElementById('addScoreStudentId').value.trim();
-    let subject = document.getElementById('addScoreSubject').value.trim();
-    const score = parseFloat(document.getElementById('addScoreValue').value);
-    const examDate = document.getElementById('addScoreExamDate').value;
+    const data = FormBuilder.collect([
+        'addScoreClass', 'addScoreStudentName', 'addScoreStudentId',
+        'addScoreSubject', 'addScoreValue', 'addScoreExamDate'
+    ]);
 
     if (!className || !studentName || !studentId || !subject) {
         Modal.alert('请完整填写');
@@ -606,7 +588,14 @@ async function confirmAddScore() {
         }
     } catch (e) { /* 降级处理 */ }
     
-    await API.admin.addScore({ className, studentName, studentId, subject, score, examDate });
+    await API.admin.addScore({
+        className: data.addScoreClass,
+        studentName: data.addScoreStudentName,
+        studentId: data.addScoreStudentId,
+        subject: data.addScoreSubject,
+        score: parseFloat(data.addScoreValue),
+        examDate: data.addScoreExamDate
+    });    
     closeModal('addScoreModal');
     renderScoreAll();
     if (currentSection === 'dashboard') renderDashboard();

@@ -12,31 +12,31 @@ export const StudentRender = {
     
     // 首页成绩亮点表格
     scoreHighlightTable(scores) {
-        if (!scores.length) return '<tr><td colspan="4">暂无数据</td></tr>';
-        return scores.slice(0, 4).map(s => {
-            const diff = (s.score - s.classAvg).toFixed(1);
-            const diffClass = diff >= 0 ? 'compare-text' : 'compare-text down';
-            const symbol = diff >= 0 ? `▲ +${diff}` : `▼ ${diff}`;
-            return `<tr><td>${s.subject}</td><td>${s.score}</td><td>${s.classAvg}</td><td class="${diffClass}">${symbol}</td></tr>`;
-        }).join('');
+        const builder = new TableBuilder().setData(scores.slice(0, 4)).setEmptyText('暂无数据');
+        builder.addColumn('subject', '科目')
+            .addColumn('score', '成绩')
+            .addColumn('classAvg', '班级均分')
+            .addColumn('diff', '对比', (_, row) => {
+                const diff = (row.score - row.classAvg).toFixed(1);
+                const symbol = diff >= 0 ? `▲ +${diff}` : `▼ ${diff}`;
+                return `<span class="${diff >= 0 ? 'compare-text' : 'compare-text down'}">${symbol}</span>`;
+            });
+        return builder.render();
     },
     
     // 成绩模块表格
     fullScoreTable(scores) {
-        return scores.map(s => {
-            const diff = (s.score - s.classAvg).toFixed(1);
-            const diffClass = diff >= 0 ? 'compare-text' : 'compare-text down';
-            const symbol = diff >= 0 ? `+${diff}` : `${diff}`;
-            return `
-                <tr>
-                    <td><strong>${s.subject}</strong></td>
-                    <td>${s.score}</td>
-                    <td>${s.classAvg}</td>
-                    <td>${s.classRank}</td>
-                    <td class="${diffClass}">${symbol}</td>
-                </tr>
-            `;
-        }).join('');
+        const builder = new TableBuilder().setData(scores).setEmptyText('暂无成绩');
+        builder.addColumn('subject', '科目')
+            .addColumn('score', '成绩')
+            .addColumn('classAvg', '班级平均分')
+            .addColumn('classRank', '班级排名')
+            .addColumn('diff', '对比均分', (_, row) => {
+                const diff = (row.score - row.classAvg).toFixed(1);
+                const symbol = diff >= 0 ? `+${diff}` : `${diff}`;
+                return `<span class="${diff >= 0 ? 'compare-text' : 'compare-text down'}">${symbol}</span>`;
+            });
+        return builder.render();
     },
     
     // 通知列表

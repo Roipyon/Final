@@ -35,41 +35,26 @@ export const TeacherRender = {
     
     // 成绩表格
     scoreTable(data, isTotal) {
-        if (!data.length) return '<table class="table"><tr><td colspan="5">暂无数据</td></tr></table>';
+        const builder = new TableBuilder().setData(data).setEmptyText('暂无成绩');
         
-        let header = isTotal ? `
-            <thead><tr><th>姓名</th><th>学号</th><th>总分</th><th>班级排名</th><th>操作</th></tr></thead>
-        ` : `
-            <thead><tr><th>姓名</th><th>学号</th><th>成绩</th><th>班级排名</th><th>操作</th></tr></thead>
-        `;
+        builder.addColumn('studentName', '姓名')
+            .addColumn('id', '学号');
         
-        const rows = data.map(item => {
-            if (isTotal) {
-                return `
-                    <tr>
-                        <td>${escapeHtml(item.studentName)}</td>
-                        <td>${escapeHtml(item.id)}</td>
-                        <td>${item.total_score}</td>
-                        <td>${item.class_rank}</td>
-                        <td>—</td>
-                    </tr>
-                `;
-            } else {
-                return `
-                    <tr>
-                        <td>${escapeHtml(item.studentName)}</td>
-                        <td>${escapeHtml(item.id)}</td>
-                        <td>${item.score}</td>
-                        <td>${item.class_subject_rank}</td>
-                        <td>
-                            <button class="btn-sm edit-score-btn" data-id="${item.scoreId}" data-subject="${item.subject}" data-score="${item.score}">编辑</button>
-                        </td>
-                    </tr>
-                `;
-            }
-        }).join('');
+        if (isTotal) {
+            builder.addColumn('total_score', '总分')
+                .addColumn('class_rank', '班级排名')
+                .addColumn('id', '操作', () => '—');
+        } else {
+            builder.addColumn('score', '成绩')
+                .addColumn('class_subject_rank', '班级排名')
+                .addColumn('scoreId', '操作', (scoreId, row) => {
+                    return `
+                        <button class="btn-sm edit-score-btn" data-id="${scoreId}" data-subject="${escapeHtml(row.subject)}" data-score="${row.score}">编辑</button>
+                    `;
+                });
+        }
         
-        return `<table class="table">${header}<tbody>${rows}</tbody></table>`;
+        return builder.render();
     },
     
     // 通知卡片列表
