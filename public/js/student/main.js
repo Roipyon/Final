@@ -111,7 +111,7 @@ async function renderScoreModule() {
     
     const stat = StudentState.classStatBySubject.find(s => s.subject === StudentState.currentSubjectFilter) || {};
     const examOptions = '<option value="">最新考试</option>' +
-        StudentState.examList.map(d => `<option value="${d}" ${StudentState.currentExamDate === d ? 'selected' : ''}>${formatDate(d)}</option>`).join('');
+        StudentState.examList.map(d => `<option value="${d}" ${StudentState.currentExamDate === formatDate(d) ? 'selected' : ''}>${formatDate(d)}</option>`).join('');
     
     const subjectOptions = StudentState.classStatBySubject.map(s => 
         `<option value="${s.subject}" ${StudentState.currentSubjectFilter === s.subject ? 'selected' : ''}>${s.subject}</option>`
@@ -141,7 +141,7 @@ async function renderScoreModule() {
     document.getElementById('scoreSection').innerHTML = html;
     
     document.getElementById('examSelect').addEventListener('change', async (e) => {
-        StudentState.currentExamDate = e.target.value;
+        StudentState.currentExamDate = formatDate(e.target.value);
         renderScoreModule();
         renderHomeModule();
     });
@@ -210,6 +210,11 @@ async function switchSection(sectionId) {
         case 'home': renderHomeModule(); break;
         case 'score': await renderScoreModule(); break;
         case 'notice': renderNoticeModule(); break;
+    }
+    // 移动端关闭侧边栏
+    const sidebar = document.getElementById('sidebar');
+    if (sidebar && sidebar.classList.contains('show')) {
+        sidebar.classList.remove('show');
     }
 }
 

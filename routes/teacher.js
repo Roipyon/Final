@@ -77,6 +77,7 @@ router.get('/scores',isTeacher,async(req,res)=>{
     }
     const [scores] = await pool.query(`
         SELECT 
+            s.id as scoreId,
             s.student_id AS id,
             u.real_name AS studentName,
             s.subject,
@@ -210,37 +211,66 @@ router.post('/fullmark',isTeacher,async(req,res)=>{
     res.json(rows[0]);
 });
 
-// 更新成绩
-router.post('/scores',isTeacher,async(req,res)=>{
-    const { studentId, subject, newScore } = req.body;
-    // 拿学生名
-    const [stu_name] = await pool.query('select real_name from users where id = ?',[studentId]);
-    const studentName = stu_name[0].real_name;
-    // 默认
+// 根据成绩ID修改
+router.put('/scores/:id',isTeacher,async(req,res)=>{
+    const scoreId = parseInt(req.params.id);
+    const { newScore } = req.body;
+    
+    if (newScore === undefined) {
+        return res.status(400).json({ success: false, message: '缺少新成绩' });
+    }
+
     const account = req.session.account;
-    const [rows] = await pool.query('select id,real_name,identity from users where account = ?',[account]);
-    // 教师信息
-    const {id: userId, real_name: user_name, identity} = rows[0];
-    const [cid] = await pool.query('SELECT id FROM classes WHERE teacher_id = ?', [userId]);
-    const classId = cid[0].id;
-    if (!classId) return res.status(403).json({ success: false,message: '无权限' });
-    const [stu] = await pool.query('SELECT 1 FROM class_members WHERE student_id = ? AND class_id = ?', [studentId, classId]);
-    const student = stu[0];
-    if (!student) return res.status(403).json({ success: false,message: '不能修改非本班学生成绩' });
-    const [response] = await pool.query('UPDATE scores SET score = ? WHERE student_id = ? AND subject = ?', [newScore, studentId, subject]);
-    if (response.affectedRows === 1) 
-    {
+    try {
+        // 获取教师所带班级
+        const [user] = await pool.query('SELECT id, real_name FROM users WHERE account = ?', [account]);
+        const userId = user[0].id;
+        const [classRows] = await pool.query('SELECT id FROM classes WHERE teacher_id = ?', [userId]);
+        if (classRows.length === 0) {
+            return res.status(403).json({ success: false, message: '您不是班主任，无权修改成绩' });
+        }
+        const classId = classRows[0].id;
+
+        // 获取成绩记录并验证班级
+        const [scoreRows] = await pool.query(
+            `SELECT s.student_id, s.class_id, s.subject, s.score, s.full_mark, u.real_name AS studentName
+             FROM scores s
+             JOIN users u ON s.student_id = u.id
+             WHERE s.id = ?`,
+            [scoreId]
+        );
+        if (scoreRows.length === 0) {
+            return res.status(404).json({ success: false, message: '成绩记录不存在' });
+        }
+        const record = scoreRows[0];
+        if (record.class_id !== classId) {
+            return res.status(403).json({ success: false, message: '只能修改本班学生的成绩' });
+        }
+        if (record.subject === '总分') {
+            return res.status(400).json({ success: false, message: '总分由系统自动计算，不可手动修改' });
+        }
+        if (newScore < 0 || newScore > record.full_mark) {
+            return res.status(400).json({ success: false, message: `成绩必须在 0-${record.full_mark} 之间` });
+        }
+
+        // 执行更新
+        await pool.query('UPDATE scores SET score = ? WHERE id = ?', [newScore, scoreId]);
+
+        // 记录日志
         await addLog(
             userId,
-            user_name,
-            identity,
-            "成绩修改",
-            `修改学生${studentName}的${subject}成绩为${newScore}`,
+            user[0].real_name,
+            'teacher',
+            '成绩修改',
+            `修改学生 ${record.studentName} 的 ${record.subject} 成绩从 ${record.score} 改为 ${newScore}`,
             classId
         );
-        res.json({ success: true,message: '修改成功'});
+
+        res.json({ success: true, message: '修改成功' });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ success: false, message: '服务器错误' });
     }
-    else res.status(500).json({ success: false,message: '修改失败'});
 });
 
 // 获取通知

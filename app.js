@@ -30,6 +30,12 @@ app.use('/admin',isAdmin, admin);
 app.get('/admin',(req,res)=>{
     res.sendFile(path.join(__dirname, '/public', 'adm.html'));
 });
+app.get('/teacher',(req,res)=>{
+    res.sendFile(path.join(__dirname, '/public', 'tea.html'));
+});
+app.get('/student',(req,res)=>{
+    res.sendFile(path.join(__dirname, '/public', 'stu.html'));
+});
 
 app.listen(PORT,HOST,()=>{
     console.log('system launched on http://127.0.0.1:5000');

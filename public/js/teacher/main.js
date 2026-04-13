@@ -88,7 +88,7 @@ async function renderScoreModule() {
     }
     
     const examOptions = '<option value="">最新考试</option>' +
-        TeacherState.examList.map(d => `<option value="${d}" ${TeacherState.currentExamDate === d ? 'selected' : ''}>${formatDate(d)}</option>`).join('');
+        TeacherState.examList.map(d => `<option value="${d}" ${TeacherState.currentExamDate === formatDate(d) ? 'selected' : ''}>${formatDate(d)}</option>`).join('');
     
     const subjectOptions = '<option value="总分" ' + (isTotal ? 'selected' : '') + '>总分</option>' +
         TeacherState.subjectGeneral.map(s => `<option value="${s.subject}" ${TeacherState.currentSubjectFilter === s.subject ? 'selected' : ''}>${s.subject}</option>`).join('');
@@ -253,6 +253,11 @@ async function switchSection(sectionId) {
         case 'notice': await renderNoticeModule(); break;
         case 'log': await renderLogModule(); break;
     }
+    // 移动端关闭侧边栏
+    const sidebar = document.getElementById('sidebar');
+    if (sidebar && sidebar.classList.contains('show')) {
+        sidebar.classList.remove('show');
+    }
 }
 
 // ---------- 全局事件 ----------
@@ -267,13 +272,12 @@ function bindGlobalEvents() {
             e.target.style.display = 'none';
         }
         if (e.target.classList.contains('edit-score-btn')) {
-            const id = e.target.dataset.id;
+            const scoreId = e.target.dataset.id;
             const subject = e.target.dataset.subject;
             const score = e.target.dataset.score;
-            const scoreItem = TeacherState.scoresData.find(s => s.id == id && s.subject === subject);
+            const scoreItem = TeacherState.scoresData.find(s => s.scoreId == scoreId && s.subject === subject);
             document.getElementById('editStudentName').value = scoreItem?.studentName || '';
-            TeacherState.currentEditId = id;
-            document.getElementById('editStudentName').value = '';
+            TeacherState.currentEditId = scoreId;
             document.getElementById('editSubject').value = subject;
             document.getElementById('editScore').value = score;
             document.getElementById('editScoreModal').style.display = 'flex';
@@ -293,14 +297,7 @@ function bindGlobalEvents() {
     });
     
     // 编辑成绩确认
-    document.getElementById('editModalConfirmBtn')?.addEventListener('click', async () => {
-        const newScore = parseFloat(document.getElementById('editScore').value);
-        const subject = document.getElementById('editSubject').value;
-        if (isNaN(newScore)) return;
-        await API.teacher.updateScore(TeacherState.currentEditId, subject, newScore);
-        closeModal('editScoreModal');
-        renderScoreModule();
-    });
+    document.getElementById('editModalConfirmBtn')?.addEventListener('click', confirmEditScore);
     
     // 编辑通知确认
     document.getElementById('editNoticeConfirmBtn')?.addEventListener('click', async () => {
@@ -318,6 +315,61 @@ function bindGlobalEvents() {
         btn.addEventListener('click', () => {
             btn.closest('.modal-mask').style.display = 'none';
         });
+    });
+}
+
+async function confirmEditScore() {
+    // 编辑成绩确认
+    document.getElementById('editModalConfirmBtn')?.addEventListener('click', async () => {
+        const newScore = Number(document.getElementById('editScore').value).toFixed(1);
+        const subject = document.getElementById('editSubject').value;
+        const scoreId = TeacherState.currentEditId;
+
+        // 总分拦截
+        if (TeacherState.currentSubjectFilter === '总分') {
+            alert("总分由各科成绩自动计算，不可直接编辑");
+            closeModal('editScoreModal');
+            return;
+        }
+
+        // 查找成绩记录
+        const scoreItem = TeacherState.scoresData.find(s => 
+            s.scoreId == scoreId && s.subject === subject
+        );
+        if (!scoreItem) {
+            alert('成绩记录不存在');
+            closeModal('editScoreModal');
+            return;
+        }
+
+        // 获取满分并校验
+        try {
+            const fullRes = await API.teacher.getFullMark(subject);
+            const fullMark = parseInt(fullRes.full_mark) || 100;
+            if (isNaN(newScore) || newScore < 0 || newScore > fullMark) {
+                alert(`请输入有效的成绩 (0-${fullMark})`);
+                return;
+            }
+        } catch (e) {
+            // 降级处理，继续提交
+            console.warn('获取满分失败，跳过范围校验');
+        }
+
+        // 提交更新
+        try {
+            const scoreId = TeacherState.currentEditId; 
+            const result = await API.teacher.updateScore(scoreId,newScore);
+            if (result.success) {
+                alert('成绩修改成功');
+                closeModal('editScoreModal');
+                await renderScoreModule();
+                await renderHome();      // 同步更新首页统计
+            } else {
+                alert(result.message || '修改失败，请重试');
+            }
+        } catch (err) {
+            alert('网络错误，请稍后重试');
+        }
     });
 }
 

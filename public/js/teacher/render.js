@@ -62,7 +62,7 @@ export const TeacherRender = {
                         <td>${item.score}</td>
                         <td>${item.class_subject_rank}</td>
                         <td>
-                            <button class="btn-sm edit-score-btn" data-id="${item.id}" data-subject="${item.subject}" data-score="${item.score}">编辑</button>
+                            <button class="btn-sm edit-score-btn" data-id="${item.scoreId}" data-subject="${item.subject}" data-score="${item.score}">编辑</button>
                         </td>
                     </tr>
                 `;

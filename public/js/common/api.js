@@ -104,10 +104,10 @@ const API = {
         },
         getNotices: () => API.request('/teacher/notices'),
         getLogs: (page = 1, pageSize = 15) => API.request(`/teacher/logs?page=${page}&pageSize=${pageSize}`),
-        updateScore: (studentId, subject, newScore) => API.request('/teacher/scores', {
-            method: 'POST',
+        updateScore: (scoreId, newScore) => API.request(`/teacher/scores/${scoreId}`, {
+            method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ studentId, subject, newScore })
+            body: JSON.stringify({ newScore })
         }),
         publishNotice: (title, content) => API.request('/teacher/notices', {
             method: 'POST',
