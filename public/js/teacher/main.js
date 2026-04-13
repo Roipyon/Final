@@ -1,6 +1,7 @@
 // ================== 教师端主入口 ==================
 import { TeacherState } from './state.js';
 import { TeacherRender } from './render.js';
+import { NoticeCard } from '../common/components/NoticeCard.js';
 
 let currentSection = 'home';
 
@@ -156,6 +157,33 @@ async function renderNoticeModule() {
     `;
     document.getElementById('noticeSection').innerHTML = html;
     
+    // 获取容器
+    const container = document.getElementById('noticeListContainer');
+    container.innerHTML = ''; // 清空
+    
+    // 用 NoticeCard 组件渲染每条通知
+    notices.forEach(notice => {
+        const card = new NoticeCard(notice, {
+            expandable: true,
+            showActions: true,   // 显示编辑/删除按钮
+            onEdit: (n) => {
+                // 打开编辑模态框（您已有的函数）
+                openEditNoticeModal(n);
+            },
+            onDelete: async (n) => {
+                if (!confirm('确定删除这条通知吗？')) return;
+                await API.teacher.deleteNotice(n.id);
+                TeacherState.notices = await API.teacher.getNotices();
+                renderNoticeModule(); // 刷新列表
+            },
+            onViewRead: async (n) => {
+                const data = await API.teacher.getNoticeReadStatus(n.id);
+                showReadStatusModal(data);
+            }
+        });
+        card.mount(container);
+    });
+
     document.getElementById('publishNoticeBtn').addEventListener('click', async () => {
         const title = document.getElementById('newTitle').value.trim();
         const content = document.getElementById('newContent').value.trim();
@@ -167,42 +195,37 @@ async function renderNoticeModule() {
         renderNoticeModule();
     });
     
-    bindNoticeEvents();
 }
 
-function bindNoticeEvents() {
-    document.querySelectorAll('.edit-notice-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const id = btn.dataset.id;
-            const notice = TeacherState.notices.find(n => n.id == id);
-            if (notice) {
-                TeacherState.currentEditingNoticeId = id;
-                document.getElementById('editNoticeTitle').value = notice.title;
-                document.getElementById('editNoticeContent').value = notice.content;
-                document.getElementById('editNoticeModal').style.display = 'flex';
-            }
-        });
+/**
+ * 显示已读/未读名单模态框
+ * @param {Object} data - 后端返回的阅读状态数据
+ */
+function showReadStatusModal(data) {
+    // 填充统计数据
+    document.getElementById('readCount').textContent = data.readCount || 0;
+    document.getElementById('unreadCount').textContent = data.unreadCount || 0;
+    
+    // 填充已读列表
+    const readListEl = document.getElementById('readList');
+    readListEl.innerHTML = '';
+    (data.readList || []).forEach(name => {
+        const li = document.createElement('li');
+        li.textContent = name;
+        readListEl.appendChild(li);
     });
     
-    document.querySelectorAll('.delete-notice-btn').forEach(btn => {
-        btn.addEventListener('click', async () => {
-            if (!confirm('确定删除？')) return;
-            await API.teacher.deleteNotice(btn.dataset.id);
-            TeacherState.notices = await API.teacher.getNotices();
-            renderNoticeModule();
-        });
+    // 填充未读列表
+    const unreadListEl = document.getElementById('unreadList');
+    unreadListEl.innerHTML = '';
+    (data.unreadList || []).forEach(name => {
+        const li = document.createElement('li');
+        li.textContent = name;
+        unreadListEl.appendChild(li);
     });
     
-    document.querySelectorAll('.view-readlist-btn').forEach(btn => {
-        btn.addEventListener('click', async () => {
-            const data = await API.teacher.getNoticeReadStatus(btn.dataset.id);
-            document.getElementById('readCount').innerText = data.readCount;
-            document.getElementById('unreadCount').innerText = data.unreadCount;
-            document.getElementById('readList').innerHTML = data.readList.map(n => `<li>${n}</li>`).join('');
-            document.getElementById('unreadList').innerHTML = data.unreadList.map(n => `<li>${n}</li>`).join('');
-            document.getElementById('readStatusModal').style.display = 'flex';
-        });
-    });
+    // 显示模态框
+    document.getElementById('readStatusModal').style.display = 'flex';
 }
 
 // ---------- 日志 ----------

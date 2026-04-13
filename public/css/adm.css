@@ -700,11 +700,6 @@ hr {
     border-left-color: transparent !important;
 }
 
-/* 已读置灰 */
-.notice-item.read {
-    opacity: 0.7;
-    background: var(--gray-light) !important;
-}
 .notice-item.read .notice-title {
     color: var(--gray);
 }

@@ -2,6 +2,7 @@
 
 import { AdminState, filterScores, sortScores, getAvailableSortFields } from './state.js';
 import { AdminRender } from './render.js';
+import { NoticeCard } from '../common/components/NoticeCard.js';
 
 let currentSection = 'dashboard';
 
@@ -131,24 +132,16 @@ async function renderDashboard() {
         .sort((a, b) => new Date(b.publishTime) - new Date(a.publishTime))
         .slice(0, 3);
     
-    const noticeHtml = latestNotices.map(notice => {
-        const isNew = isNewNotice(notice.publishTime);
-        return `
-            <div class="recent-notice-item ${isNew ? 'unread' : ''}" data-id="${notice.id}">
-                <div class="notice-summary">
-                    <span class="title">
-                        ${escapeHtml(notice.title)}
-                        ${isNew ? '<span class="notice-badge-sm" style="margin-left:8px;">新</span>' : ''}
-                    </span>
-                    <span class="meta">${escapeHtml(notice.className)} · ${formatDate(notice.publishTime)}</span>
-                    <span class="expand-icon">▼</span>
-                </div>
-                <div class="notice-detail">
-                    <div class="notice-content">${escapeHtml(notice.content)}</div>
-                </div>
-            </div>
-        `;
-    }).join('');
+    const noticeContainer = document.createElement('div');
+    latestNotices.forEach(notice => {
+        const card = new NoticeCard(notice, {
+            expandable: false,          // 首页不展开
+            showBadge: true,            // 显示“新”徽章（基于发布时间）
+            showActions: false,         // 无操作按钮
+        });
+        card.mount(noticeContainer);
+    });
+    const noticeHtml = noticeContainer.innerHTML;
     
     const logRows = logs.slice(0, 3).map(l => `
         <tr><td>${escapeHtml(l.operator)}</td><td>${escapeHtml(l.operationType)}</td><td>${escapeHtml(l.content)}</td><td>${formatDateTime(l.operateTime)}</td></tr>
@@ -336,26 +329,7 @@ function renderNoticeAll() {
     
     const sorted = [...AdminState.allNotices].sort((a, b) => new Date(b.publishTime) - new Date(a.publishTime));
     
-    const cards = sorted.map(notice => {
-    const isNew = isNewNotice(notice.publishTime);
-        return `
-            <div class="notice-item ${isNew ? 'unread' : ''}" data-id="${notice.id}">
-                <div class="notice-summary">
-                    <span class="title">
-                        ${escapeHtml(notice.title)}
-                        ${isNew ? '<span class="notice-badge-sm" style="margin-left:8px;">新</span>' : ''}
-                    </span>
-                    <span class="meta">${escapeHtml(notice.className)} · ${formatDate(notice.publishTime)}</span>
-                    <span class="expand-icon">▼</span>
-                </div>
-                <div class="notice-detail">
-                    <div class="notice-content">${escapeHtml(notice.content)}</div>
-                    <div class="notice-time">发布人：${escapeHtml(notice.teacher_name)} | 已读 ${notice.readCount}/${notice.totalStu}</div>
-                </div>
-            </div>
-        `;
-    }).join('');
-    
+    // 构建筛选栏 + 容器外壳
     let filterHtml = '<select id="classFilterNotice" class="filter-select"><option value="all">所有班级</option>';
     AdminState.classes.forEach(c => { filterHtml += `<option value="${c.className}">${escapeHtml(c.className)}</option>`; });
     filterHtml += '</select>';
@@ -363,34 +337,40 @@ function renderNoticeAll() {
     const html = `
         <h3>全校班级通知</h3>
         <div class="filter-bar">${filterHtml}</div>
-        <div id="noticeListContainer">${cards || '<div class="empty-tip">暂无通知</div>'}</div>
+        <div id="noticeListContainer"></div>
     `;
     section.innerHTML = html;
+    
+    const container = document.getElementById('noticeListContainer');
+    
+    // 渲染卡片函数（复用）
+    const renderCards = (notices) => {
+        container.innerHTML = '';
+        if (!notices.length) {
+            container.innerHTML = '<div class="empty-tip">暂无通知</div>';
+            return;
+        }
+        notices.forEach(notice => {
+            const isNew = isNewNotice(notice.publishTime);
+            const card = new NoticeCard(notice, {
+                expandable: true,
+                showBadge: true,        // 显示“新”徽章
+                showActions: false,     // 管理员无操作按钮
+                // 可以传入自定义未读判断：管理员端基于发布时间
+                isUnread: isNew,
+                badgeText: '新'
+            });
+            card.mount(container);
+        });
+    };
+    
+    renderCards(sorted);
     
     // 筛选事件
     document.getElementById('classFilterNotice')?.addEventListener('change', (e) => {
         const val = e.target.value;
         const filtered = val === 'all' ? sorted : sorted.filter(n => n.className === val);
-        const filteredHtml = filtered.map(notice => {
-            const isNew = isNewNotice(notice.publishTime);
-            return `
-                <div class="notice-item ${isNew ? 'unread' : ''}" data-id="${notice.id}">
-                    <div class="notice-summary">
-                        <span class="title">
-                            ${escapeHtml(notice.title)}
-                            ${isNew ? '<span class="notice-badge-sm" style="margin-left:8px;">新</span>' : ''}
-                        </span>
-                        <span class="meta">${escapeHtml(notice.className)} · ${formatDate(notice.publishTime)}</span>
-                        <span class="expand-icon">▼</span>
-                    </div>
-                    <div class="notice-detail">
-                        <div class="notice-content">${escapeHtml(notice.content)}</div>
-                        <div class="notice-time">发布人：${escapeHtml(notice.teacher_name)} | 已读 ${notice.readCount}/${notice.totalStu}</div>
-                    </div>
-                </div>
-            `;
-        }).join('');
-        document.getElementById('noticeListContainer').innerHTML = filteredHtml || '<div class="empty-tip">暂无通知</div>';
+        renderCards(filtered);
     });
 }
 
