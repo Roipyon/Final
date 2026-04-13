@@ -34,6 +34,9 @@ async function refreshAllData(examDate = '') {
 
 // ---------- 首页 ----------
 async function renderHome() {
+    const section = document.getElementById('homeSection');
+    section.innerHTML = TeacherRender.homeSkeleton();
+
     const unreadCount = TeacherState.notices.filter(n => n.unreadCount > 0).length;
     const recentNotices = [...TeacherState.notices]
         .sort((a, b) => new Date(b.publishTime) - new Date(a.publishTime))
@@ -67,9 +70,12 @@ async function renderHome() {
 
 // ---------- 成绩管理 ----------
 async function renderScoreModule() {
+    const section = document.getElementById('scoreSection');
+    const isTotal = TeacherState.currentSubjectFilter === '总分';
+    section.innerHTML = TeacherRender.scoreSkeleton(isTotal);
+
     await refreshAllData(TeacherState.currentExamDate);
     
-    const isTotal = TeacherState.currentSubjectFilter === '总分';
     let displayData, stats;
     
     if (isTotal) {
@@ -143,6 +149,9 @@ function exportCSV() {
 
 // ---------- 通知管理 ----------
 async function renderNoticeModule() {
+    const section = document.getElementById('noticeSection');
+    section.innerHTML = TeacherRender.noticeSkeleton();
+
     const notices = TeacherState.notices;
     const html = `
         <h3>班级通知管理</h3>
@@ -230,6 +239,9 @@ function showReadStatusModal(data) {
 
 // ---------- 日志 ----------
 async function renderLogModule() {
+    const section = document.getElementById('logSection');
+    section.innerHTML = TeacherRender.logSkeleton();
+    
     const data = await API.teacher.getLogs(TeacherState.currentLogPage, TeacherState.logsPerPage);
     TeacherState.logTotal = data.total;
     const logs = data.logs;

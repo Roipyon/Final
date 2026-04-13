@@ -91,5 +91,119 @@ export const TeacherRender = {
                 </div>
             </div>
         `).join('');
+    },
+
+    // 首页骨架屏
+    homeSkeleton() {
+        return `
+            <h3>班级工作台 · <span class="skeleton" style="display:inline-block; width:100px; height:24px;"></span></h3>
+            <p><span class="skeleton" style="display:inline-block; width:180px; height:20px;"></span></p>
+            <div class="stats-grid">
+                ${Array(4).fill(0).map(() => `
+                    <div class="stat-card">
+                        <div class="skeleton" style="height:32px; width:60%; margin:0 auto 8px;"></div>
+                        <div class="skeleton" style="height:16px; width:40%; margin:0 auto;"></div>
+                    </div>
+                `).join('')}
+            </div>
+            <div style="margin-top:24px;">
+                <h4>最新通知</h4>
+                ${Array(3).fill(0).map(() => `
+                    <div class="skeleton" style="height:60px; margin-bottom:12px; border-radius:8px;"></div>
+                `).join('')}
+            </div>
+        `;
+    },
+
+    // 成绩页面骨架屏
+    scoreSkeleton(isTotal) {
+        const cardCount = isTotal ? 3 : 5;
+        return `
+            <div style="display:flex; justify-content:space-between;">
+                <h3>成绩管理 · <span class="skeleton" style="display:inline-block; width:80px; height:24px;"></span></h3>
+                <div class="filter-bar">
+                    <div class="skeleton" style="width:120px; height:36px; border-radius:30px;"></div>
+                    <div class="skeleton" style="width:100px; height:36px; border-radius:30px;"></div>
+                </div>
+            </div>
+            <div class="stats-grid">
+                ${Array(cardCount).fill(0).map(() => `
+                    <div class="stat-card">
+                        <div class="skeleton" style="height:32px; width:60%; margin:0 auto 8px;"></div>
+                        <div class="skeleton" style="height:16px; width:40%; margin:0 auto;"></div>
+                    </div>
+                `).join('')}
+            </div>
+            <div class="skeleton-table">
+                <div class="skeleton-table-header">
+                    <div class="skeleton" style="width:15%; height:24px;"></div>
+                    <div class="skeleton" style="width:15%; height:24px;"></div>
+                    <div class="skeleton" style="width:15%; height:24px;"></div>
+                    <div class="skeleton" style="width:15%; height:24px;"></div>
+                    <div class="skeleton" style="width:20%; height:24px;"></div>
+                    <div class="skeleton" style="width:20%; height:24px;"></div>
+                </div>
+                ${Array(6).fill(0).map(() => `
+                    <div class="skeleton-row">
+                        <div class="skeleton skeleton-cell" style="width:15%;"></div>
+                        <div class="skeleton skeleton-cell" style="width:15%;"></div>
+                        <div class="skeleton skeleton-cell" style="width:15%;"></div>
+                        <div class="skeleton skeleton-cell" style="width:15%;"></div>
+                        <div class="skeleton skeleton-cell" style="width:20%;"></div>
+                        <div class="skeleton skeleton-cell" style="width:20%;"></div>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+    },
+
+    // 通知管理骨架屏
+    noticeSkeleton() {
+        return `
+            <h3>班级通知管理</h3>
+            <div class="card" style="background:#f9f9f9; padding:16px;">
+                <h4>发布新通知</h4>
+                <div class="skeleton" style="height:36px; margin-bottom:16px;"></div>
+                <div class="skeleton" style="height:100px; margin-bottom:16px;"></div>
+                <div class="skeleton" style="width:100px; height:36px;"></div>
+            </div>
+            <h4 style="margin-top:24px;">已发布通知</h4>
+            ${Array(3).fill(0).map(() => `
+                <div class="notice-item" style="padding:16px; margin-bottom:12px;">
+                    <div style="display:flex; gap:12px;">
+                        <div class="skeleton" style="width:60%; height:24px;"></div>
+                        <div class="skeleton" style="width:80px; height:20px; border-radius:20px;"></div>
+                    </div>
+                    <div class="skeleton" style="width:100%; height:40px; margin-top:12px;"></div>
+                    <div class="skeleton" style="width:200px; height:16px; margin-top:8px;"></div>
+                </div>
+            `).join('')}
+        `;
+    },
+
+    // 日志骨架屏
+    logSkeleton() {
+        return `
+            <h3>班级操作日志</h3>
+            <div class="skeleton-table">
+                <div class="skeleton-table-header">
+                    <div class="skeleton" style="width:15%; height:24px;"></div>
+                    <div class="skeleton" style="width:15%; height:24px;"></div>
+                    <div class="skeleton" style="width:40%; height:24px;"></div>
+                    <div class="skeleton" style="width:30%; height:24px;"></div>
+                </div>
+                ${Array(8).fill(0).map(() => `
+                    <div class="skeleton-row">
+                        <div class="skeleton skeleton-cell" style="width:15%;"></div>
+                        <div class="skeleton skeleton-cell" style="width:15%;"></div>
+                        <div class="skeleton skeleton-cell" style="width:40%;"></div>
+                        <div class="skeleton skeleton-cell" style="width:30%;"></div>
+                    </div>
+                `).join('')}
+            </div>
+            <div style="margin-top:20px; display:flex; justify-content:flex-end; gap:8px;">
+                ${Array(3).fill(0).map(() => `<div class="skeleton" style="width:36px; height:36px; border-radius:50%;"></div>`).join('')}
+            </div>
+        `;
     }
 };

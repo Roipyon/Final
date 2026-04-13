@@ -68,6 +68,9 @@ function updateUnreadBadge() {
 
 // ---------- 首页 ----------
 function renderHomeModule() {
+    const section = document.getElementById('homeSection');
+    section.innerHTML = StudentRender.homeSkeleton();
+
     const unread = getUnreadCount();
     const sortedNotices = getFilteredSortedNotices();
     const topNotices = sortedNotices.slice(0, 3);
@@ -119,6 +122,9 @@ function renderHomeModule() {
 
 // ---------- 成绩模块 ----------
 async function renderScoreModule() {
+    const section = document.getElementById('scoreSection');
+    section.innerHTML = StudentRender.scoreSkeleton();
+
     await refreshAllData(StudentState.currentExamDate);
     
     const stat = StudentState.classStatBySubject.find(s => s.subject === StudentState.currentSubjectFilter) || {};
@@ -165,6 +171,9 @@ async function renderScoreModule() {
 
 // ---------- 通知模块 ----------
 function renderNoticeModule() {
+    const section = document.getElementById('noticeSection');
+    section.innerHTML = StudentRender.noticeSkeleton();
+    
     const filtered = getFilteredSortedNotices();
     const totalPages = Math.ceil(filtered.length / StudentState.noticesPerPage);
     if (StudentState.currentNoticePage > totalPages) {
