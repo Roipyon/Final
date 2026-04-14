@@ -7,10 +7,6 @@ const { isStudent } = require('../middleware/auth');
 
 router.use(isStudent);
 
-router.get('/',isStudent,(req,res)=>{
-    res.sendFile(path.join(__dirname, '../public', 'stu.html'));
-});
-
 // 获取当前学生用户信息
 router.get('/info',isStudent,async(req,res)=>{
     const account = req.session.account;

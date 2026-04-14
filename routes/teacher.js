@@ -7,10 +7,6 @@ const { isTeacher } = require('../middleware/auth');
 
 router.use(isTeacher);
 
-router.get('/',isTeacher,(req,res)=>{
-    res.sendFile(path.join(__dirname, '../public', 'tea.html'));
-});
-
 // 教师端
 
 // 获取当前用户信息
