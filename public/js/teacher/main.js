@@ -137,7 +137,7 @@ async function renderScoreModule() {
     const html = `
         <div style="display:flex; justify-content:space-between;">
             <h3>成绩管理 · ${TeacherState.currentSubjectFilter}</h3>
-            <div class="filter-bar">
+            <div class="filter-bar desktop-filter-bar">
                 ${filterBarHTML}
             </div>
         </div>
