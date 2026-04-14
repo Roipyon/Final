@@ -198,8 +198,10 @@ async function renderDashboard() {
         </div>
         <div style="margin-top:24px;">
             <h4>最近操作日志</h4>
-            <table class="table"><thead><tr><th>操作人</th><th>类型</th><th>内容</th><th>时间</th></tr></thead><tbody>${logRows}</tbody></table>
-            <div style="text-align:right;"><a href="#" data-nav="systemLog" class="nav-link">查看全部日志 →</a></div>
+            <div class="table-wrapper">
+                <table class="table"><thead><tr><th>操作人</th><th>类型</th><th>内容</th><th>时间</th></tr></thead><tbody>${logRows}</tbody></table>
+            </div>
+                <div style="text-align:right;"><a href="#" data-nav="systemLog" class="nav-link">查看全部日志 →</a></div>
         </div>
     `;
     
@@ -424,7 +426,9 @@ function renderSystemLog() {
     
     const html = `
         <h3>系统操作日志</h3>
-        <table class="table"><thead><tr><th>操作人</th><th>类型</th><th>内容</th><th>时间</th></tr></thead><tbody>${rows}</tbody></table>
+        <div class="table-wrapper">
+            <table class="table"><thead><tr><th>操作人</th><th>类型</th><th>内容</th><th>时间</th></tr></thead><tbody>${rows}</tbody></table>
+        </div>
         <div class="pagination">${pagination}</div>
     `;
     document.getElementById('systemLogSection').innerHTML = html;

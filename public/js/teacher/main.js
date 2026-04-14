@@ -314,12 +314,14 @@ async function renderLogModule() {
     
     const html = `
         <h3>班级操作日志</h3>
-        <table class="table">
-            <thead><tr><th>操作人</th><th>类型</th><th>内容</th><th>时间</th></tr></thead>
-            <tbody>
-                ${logs.map(l => `<tr><td>${escapeHtml(l.user_name)}</td><td>${escapeHtml(l.operation_type)}</td><td>${escapeHtml(l.operation_content)}</td><td>${formatDateTime(l.created_at)}</td></tr>`).join('')}
-            </tbody>
-        </table>
+        <div class="table-wrapper">
+            <table class="table">
+                <thead><tr><th>操作人</th><th>类型</th><th>内容</th><th>时间</th></tr></thead>
+                <tbody>
+                    ${logs.map(l => `<tr><td>${escapeHtml(l.user_name)}</td><td>${escapeHtml(l.operation_type)}</td><td>${escapeHtml(l.operation_content)}</td><td>${formatDateTime(l.created_at)}</td></tr>`).join('')}
+                </tbody>
+            </table>
+        </div>
         <div class="pagination">
             ${Array.from({length: totalPages}, (_, i) => `
                 <button class="page-btn ${i+1 === TeacherState.currentLogPage ? 'active-page' : ''}" data-page="${i+1}">${i+1}</button>
