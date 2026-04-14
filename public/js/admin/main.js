@@ -3,6 +3,7 @@
 import { AdminState, filterScores, sortScores, getAvailableSortFields } from './state.js';
 import { AdminRender } from './render.js';
 import { NoticeCard } from '../common/components/NoticeCard.js';
+import { openFilterDrawer, closeFilterDrawer, createFilterDrawer } from '../common/filterDrawer.js';
 
 let currentSection = 'dashboard';
 
@@ -78,11 +79,49 @@ async function renderScoreAll() {
     
     section.innerHTML = `
         <h3>全量成绩管理 (跨班级)</h3>
+        <button class="mobile-filter-btn" id="mobileFilterBtn">
+            <span>筛选条件</span>
+            <i>▼</i>
+        </button>
         ${AdminRender.filterBar()}
         ${AdminRender.statsCards(stats, isTotal)}
-        ${AdminRender.scoreTable(displayData, isTotal, hasExamDate)}
+        <div class="table-wrapper">
+            ${AdminRender.scoreTable(displayData, isTotal, hasExamDate)}
+        </div>
     `;
     
+    document.getElementById('mobileFilterBtn')?.addEventListener('click', () => {
+        const filterBar = document.querySelector('.filter-bar');
+        if (!filterBar) return;
+
+        openFilterDrawer(filterBar.innerHTML, {
+            onApply: (body) => {
+                // 同步筛选值到 AdminState
+                const examSelect = body.querySelector('#examSelect');
+                if (examSelect) AdminState.currentExamDate = examSelect.value;
+                const classFilter = body.querySelector('#classFilterAll');
+                if (classFilter) AdminState.globalClassFilter = classFilter.value;
+                const subjectFilter = body.querySelector('#subjectFilterAll');
+                if (subjectFilter) AdminState.globalSubjectFilter = subjectFilter.value;
+                const searchInput = body.querySelector('#searchInput');
+                if (searchInput) AdminState.currentSearchKeyword = searchInput.value;
+                const sortField = body.querySelector('#sortFieldSelect');
+                if (sortField) AdminState.currentSortField = sortField.value;
+                
+                renderScoreAll();
+            },
+            onReset: () => {
+                AdminState.currentExamDate = '';
+                AdminState.globalSubjectFilter = AdminState.allSubjects[0] || '数学';
+                AdminState.globalClassFilter = '所有班级';
+                AdminState.currentSearchKeyword = '';
+                AdminState.currentSortField = 'className';
+                AdminState.currentSortOrder = 'asc';
+                renderScoreAll();
+            }
+        });
+    });
+
     // 重新绑定筛选栏事件
     bindFilterBarEvents();
     updateSortButtonText();
@@ -907,6 +946,7 @@ async function init() {
     
     // 退出登录
     document.getElementById('logoutBtn')?.addEventListener('click', () => API.logout());
+    createFilterDrawer();
 }
 
 init();

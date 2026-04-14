@@ -2,6 +2,7 @@
 import { StudentState } from './state.js';
 import { StudentRender } from './render.js';
 import { NoticeCard } from '../common/components/NoticeCard.js';
+import { openFilterDrawer, createFilterDrawer } from '../common/filterDrawer.js';
 
 let currentSection = 'home';
 
@@ -142,18 +143,29 @@ async function renderScoreModule() {
         `<option value="${s.subject}" ${StudentState.currentSubjectFilter === s.subject ? 'selected' : ''}>${s.subject}</option>`
     ).join('');
     
+    // 构建筛选栏 HTML，供移动端抽屉复用
+    const filterBarHTML = `
+        <select id="examSelect" class="filter-select">${examOptions}</select>
+        <select id="subjectSelect" class="filter-select">${subjectOptions}</select>
+    `;
+
     const html = `
         <div style="display:flex; justify-content:space-between;">
             <h3>我的成绩 · ${escapeHtml(StudentState.className)}</h3>
             <div class="filter-bar">
-                <select id="examSelect" class="filter-select">${examOptions}</select>
-                <select id="subjectFilterSelect" class="filter-select">${subjectOptions}</select>
+                ${filterBarHTML}
             </div>
         </div>
-        <table class="table">
-            <thead><tr><th>科目</th><th>成绩</th><th>班级平均分</th><th>班级排名</th><th>对比均分</th></tr></thead>
-            <tbody>${StudentRender.fullScoreTable(StudentState.personalScores)}</tbody>
-        </table>
+        <button class="mobile-filter-btn" id="mobileFilterBtn">
+            <span>筛选</span>
+            <i>▼</i>
+        </button>
+        <div class="table-wrapper">
+            <table class="table">
+                <thead><tr><th>科目</th><th>成绩</th><th>班级平均分</th><th>班级排名</th><th>对比均分</th></tr></thead>
+                <tbody>${StudentRender.fullScoreTable(StudentState.personalScores)}</tbody>
+            </table>
+        </div>
         <h4 style="margin-top:24px;">班级统计数据 · ${StudentState.currentSubjectFilter}</h4>
         <div class="stats-grid">
             <div class="stat-card"><div class="stat-value">${stat.avg || '--'}</div><div>平均分</div></div>
@@ -163,16 +175,39 @@ async function renderScoreModule() {
             <div class="stat-card"><div class="stat-value">${stat.passRate || '0%'}</div><div>及格率</div></div>
         </div>
     `;
-    document.getElementById('scoreSection').innerHTML = html;
+    section.innerHTML = html;
     
     document.getElementById('examSelect').addEventListener('change', async (e) => {
         StudentState.currentExamDate = formatDate(e.target.value);
         renderScoreModule();
         renderHomeModule();
     });
-    document.getElementById('subjectFilterSelect').addEventListener('change', (e) => {
+    document.getElementById('subjectSelect').addEventListener('change', (e) => {
         StudentState.currentSubjectFilter = e.target.value;
         renderScoreModule();
+    });
+
+    // 移动端筛选按钮
+    document.getElementById('mobileFilterBtn')?.addEventListener('click', () => {
+        const drawerContent = `
+            <div style="display:flex; flex-direction:column; gap:16px;">
+                ${filterBarHTML}
+            </div>
+        `;
+        openFilterDrawer(drawerContent, {
+            onApply: (body) => {
+                const examSelect = body.querySelector('#examSelect');
+                const subjectSelect = body.querySelector('#subjectSelect');
+                if (examSelect) StudentState.currentExamDate = formatDate(examSelect.value);
+                if (subjectSelect) StudentState.currentSubjectFilter = subjectSelect.value;
+                renderScoreModule();
+            },
+            onReset: () => {
+                StudentState.currentExamDate = '';
+                StudentState.currentSubjectFilter = StudentState.classStatBySubject[0]?.subject || '';
+                renderScoreModule();
+            }
+        });
     });
 }
 
@@ -299,6 +334,7 @@ async function init() {
     switchSection('home');
     
     document.getElementById('logoutBtn')?.addEventListener('click', () => API.logout());
+    createFilterDrawer();
 }
 
 init();

@@ -2,6 +2,7 @@
 import { TeacherState } from './state.js';
 import { TeacherRender } from './render.js';
 import { NoticeCard } from '../common/components/NoticeCard.js';
+import { openFilterDrawer, createFilterDrawer } from '../common/filterDrawer.js';
 
 let currentSection = 'home';
 
@@ -127,21 +128,32 @@ async function renderScoreModule() {
     const subjectOptions = '<option value="总分" ' + (isTotal ? 'selected' : '') + '>总分</option>' +
         TeacherState.subjectGeneral.map(s => `<option value="${s.subject}" ${TeacherState.currentSubjectFilter === s.subject ? 'selected' : ''}>${s.subject}</option>`).join('');
     
+    // 构建筛选栏 HTML，供移动端抽屉复用
+    const filterBarHTML = `
+        <select id="examSelect" class="filter-select">${examOptions}</select>
+        <select id="subjectSelect" class="filter-select">${subjectOptions}</select>
+    `;
+
     const html = `
         <div style="display:flex; justify-content:space-between;">
             <h3>成绩管理 · ${TeacherState.currentSubjectFilter}</h3>
             <div class="filter-bar">
-                <select id="examSelect" class="filter-select">${examOptions}</select>
-                <select id="subjectSelect" class="filter-select">${subjectOptions}</select>
+                ${filterBarHTML}
             </div>
         </div>
+        <button class="mobile-filter-btn" id="mobileFilterBtn">
+            <span>筛选</span>
+            <i>▼</i>
+        </button>
         ${TeacherRender.statsCards(stats, isTotal)}
-        ${TeacherRender.scoreTable(displayData, isTotal)}
+        <div class="table-wrapper">
+            ${TeacherRender.scoreTable(displayData, isTotal)}
+        </div>
         <div style="margin-top:16px;">
             <button id="exportScoreBtn" class="btn-sm">导出CSV</button>
         </div>
     `;
-    document.getElementById('scoreSection').innerHTML = html;
+    section.innerHTML = html;
     
     document.getElementById('examSelect').addEventListener('change', async (e) => {
         TeacherState.currentExamDate = formatDate(e.target.value);
@@ -152,6 +164,31 @@ async function renderScoreModule() {
         renderScoreModule();
     });
     document.getElementById('exportScoreBtn').addEventListener('click', exportCSV);
+
+    // 绑定移动端筛选按钮
+    document.getElementById('mobileFilterBtn')?.addEventListener('click', () => {
+        // 抽屉内容：复用筛选栏 HTML，保持结构一致
+        const drawerContent = `
+            <div class="filter-bar" style="display:flex; flex-direction:column; gap:16px;">
+                ${filterBarHTML}
+            </div>
+        `;
+        
+        openFilterDrawer(drawerContent, {
+            onApply: (body) => {
+                const examSelect = body.querySelector('#examSelect');
+                const subjectSelect = body.querySelector('#subjectSelect');
+                if (examSelect) TeacherState.currentExamDate = formatDate(examSelect.value);
+                if (subjectSelect) TeacherState.currentSubjectFilter = subjectSelect.value;
+                renderScoreModule();
+            },
+            onReset: () => {
+                TeacherState.currentExamDate = '';
+                TeacherState.currentSubjectFilter = '总分';
+                renderScoreModule();
+            }
+        });
+    });
 }
 
 function exportCSV() {
@@ -455,6 +492,7 @@ async function init() {
     switchSection('home');
     
     document.getElementById('logoutBtn')?.addEventListener('click', () => API.logout());
+    createFilterDrawer();
 }
 
 init();
