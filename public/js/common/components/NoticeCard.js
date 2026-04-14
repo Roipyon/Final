@@ -24,10 +24,8 @@ export class NoticeCard {
             showBadge: true,
             showActions: false,
             showReadStats: true,
-            // 可选覆盖：未读/新 状态；若为 undefined 则使用 notice 中的字段或自动计算
             isUnread: undefined,
             isNew: undefined,
-            // 可选自定义徽章文案（优先级最高）
             badgeText: null,
             onEdit: null,
             onDelete: null,

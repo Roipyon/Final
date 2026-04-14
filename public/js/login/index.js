@@ -59,26 +59,48 @@ async function postInfo(ele1,ele2,identity)
 {
     const account = ele1.value.trim();
     const password = ele2.value.trim();
-    const response = await fetch('/',{
-        method: 'post',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-            account: account,
-            password: password,
-            identity: identity
-        })
-    });
-    console.dir(response)
-    if (response.redirected) 
-    {
-        window.location.href = response.url;
+
+    // 前端校验
+    if (!account) {
+        alert('账号不能为空');
         return;
     }
-    const resJson = await response.json();
-    if (!resJson.success) 
-    {
-        alert(resJson.message)
+    if (!password) {
+        alert('密码不能为空');
         return;
+    }
+    if (password.length < 8) {
+        alert('密码长度至少8位');
+        return;
+    }
+    if (!judge.test(password)) {
+        alert('密码必须包含数字');
+        return;
+    }
+    try {
+        const response = await fetch('/',{
+            method: 'post',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                account: account,
+                password: password,
+                identity: identity
+            })
+        });
+        if (response.redirected) 
+        {
+            window.location.href = response.url;
+            return;
+        }
+        const resJson = await response.json();
+        if (!resJson.success) 
+        {
+            alert(resJson.message || '登录失败，请检查账号和密码')
+            return;
+        }
+    } catch (err) {
+        console.error('登录请求失败：',err);
+        alert('网络错误，无法连接到服务器，请稍后再试')
     }
 }
 

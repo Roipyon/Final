@@ -58,7 +58,6 @@ async function renderScoreAll() {
 
     const section = document.getElementById('scoreAllSection');
     
-    // ========== 1. 立即渲染骨架屏 ==========
     section.innerHTML = `
         <h3>全量成绩管理 (跨班级)</h3>
         ${AdminRender.filterBar()}
@@ -69,17 +68,14 @@ async function renderScoreAll() {
     // 筛选栏的事件绑定（因为 filterBar 是静态 HTML，需要在这里绑定事件）
     bindFilterBarEvents();
 
-    // ========== 2. 异步加载数据 ==========
     await loadScoresData();
     
-    // ========== 3. 数据处理 ==========
     let rawData = isTotal ? AdminState.scoresTotal : AdminState.allScores;
     let displayData = filterScores(rawData, isTotal);
     const stats = computeStats(displayData);
     const hasExamDate = !!AdminState.currentExamDate;
     displayData = sortScores(displayData, isTotal, hasExamDate);
     
-    // ========== 4. 用真实内容替换骨架屏 ==========
     section.innerHTML = `
         <h3>全量成绩管理 (跨班级)</h3>
         ${AdminRender.filterBar()}
@@ -137,7 +133,7 @@ async function renderDashboard() {
         const card = new NoticeCard(notice, {
             expandable: false,          // 首页不展开
             showActions: false,         // 无操作按钮
-            isNew: true
+            isUnread: false
         });
         card.mount(noticeContainer);
     });
@@ -354,6 +350,7 @@ function renderNoticeAll() {
             const card = new NoticeCard(notice, {
                 expandable: true,
                 showActions: false,    // 管理员无操作按钮
+                isUnread: false
             });
             card.mount(container);
         });
@@ -598,12 +595,13 @@ async function confirmAddScore() {
             alert(`成绩必须在 0-${fullMark} 之间`);
             return;
         }
-    } catch (e) { /* 降级处理 */ }
-    
-    await API.admin.addScore({ className, studentName, studentId, subject, score, examDate });
-    closeModal('addScoreModal');
-    renderScoreAll();
-    if (currentSection === 'dashboard') renderDashboard();
+        await API.admin.addScore({ className, studentName, studentId, subject, score, examDate });
+        closeModal('addScoreModal');
+        renderScoreAll();
+        if (currentSection === 'dashboard') renderDashboard();
+    } catch (e) { 
+        console.error('添加成绩失败:', err);
+    }
 }
 
 async function confirmEditScore() {

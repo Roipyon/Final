@@ -17,6 +17,8 @@
     --border: #e4e7ed;
     --sidebar-width: 220px;
     --header-height: 60px;
+
+    --warning-rgb: 230, 162, 60;
 }
 
 body {
@@ -119,8 +121,9 @@ button.btn-sm {
     transform: translateY(-2px);
 }
 .notice-item.unread {
-    background: rgba(230,162,60,0.05);
-    border-left: 4px solid var(--warning);
+    background: rgba(var(--warning-rgb), 0.08) !important;
+    border-left: 4px solid var(--warning) !important;
+    position: relative;
 }
 .notice-title {
     font-weight: 600;
@@ -395,15 +398,6 @@ button.btn-sm {
 .nav-link:hover {
     opacity: 0.8;
     text-decoration: underline;
-}
-
-/* 通知样式 */
-
-/* 未读通知：黄色背景 + 橙色左边框（与原有风格一致） */
-.notice-item.unread {
-    background: rgba(var(--warning-rgb), 0.08) !important;
-    border-left: 4px solid var(--warning) !important;
-    position: relative;
 }
 
 /* 已读通知置灰（保留） */

@@ -8,10 +8,26 @@ const API = {
                 return;
             }
             if (!res.ok) {
-                const errText = await res.text();
-                throw new Error(`请求失败 ${res.status}: ${errText}`);
+                // 尝试解析错误响应
+                let errorMessage = `请求失败 (${res.status})`;
+                try {
+                    const errData = await res.json();
+                    errorMessage = errData.message || errorMessage;
+                } catch (e) {
+                    // 非 JSON 响应，使用状态文本
+                    errorMessage = `服务器错误: ${res.status} ${res.statusText}`;
+                }
+                throw new Error(errorMessage);
             }
-            return await res.json();
+            
+            const data = await res.json();
+            
+            // 业务层面的失败（有些接口返回 200 但 success: false）
+            if (data && data.success === false) {
+                throw new Error(data.message || '操作失败');
+            }
+            
+            return data;
         } catch (err) {
             console.error('API Error:', err);
             alert('操作失败，请稍后重试');

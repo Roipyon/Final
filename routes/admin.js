@@ -336,6 +336,9 @@ router.delete('/classes/:classId/students/:studentId',isAdmin,async(req,res)=>{
 router.put('/classes/:classId/teacher',isAdmin,async(req,res)=>{
     const classId = parseInt(req.params.classId);
     const { teacherId } = req.body; // 传 null 表示解绑
+    if (classId === undefined || isNaN(classId)) {
+        return res.status(400).json({ success: false, message: '班级ID无效' });
+    }
     try {
         if (teacherId) {
             // 检查该教师是否已经是其他班级的班主任
@@ -553,10 +556,10 @@ router.put('/scores/:id',isAdmin,async(req,res)=>{
             `修改学生 ${student[0].real_name} 的 ${old.subject} 成绩从 ${old.score} 改为 ${newScore}`, 
             old.class_id
         );
-        res.json({ success: true });
+        res.json({ success: true, message: '修改成功'});
     } catch (err) {
         console.error(err);
-        res.status(500).json({ success: false });
+        res.status(500).json({ success: false, message: '操作失败'});
     }
 });
 

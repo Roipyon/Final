@@ -1,6 +1,4 @@
-/* ===========================================
-   1. 全局重置 & 根变量（统一风格）
-=========================================== */
+/* 全局重置 & 根变量（统一风格）*/
 * {
   margin: 0;
   padding: 0;
@@ -10,21 +8,19 @@
 }
 
 :root {
-  /* 主色 */
   --primary: #4096ff;
   --secondary: #67c23a;
   --warning: #e6a23c;
   --danger: #f56c6c;
-
-  /* 中性色 */
   --gray-light: #f5f7fa;
   --gray: #909399;
   --gray-dark: #303133;
   --border: #e4e7ed;
 
-  /* 布局尺寸 */
   --sidebar-width: 200px;
   --header-height: 60px;
+
+  --warning-rgb: 230, 162, 60;
 }
 
 body {
@@ -45,9 +41,6 @@ button {
   font-size: 14px;
 }
 
-/* ===========================================
-   2. 通用组件（按钮、卡片、表格、标签）
-=========================================== */
 /* 按钮 */
 .btn-primary { background: var(--primary); color: #fff; }
 .btn-default { background: #fff; border: 1px solid var(--border); }
@@ -97,9 +90,6 @@ button {
   color: #fff;
 }
 
-/* ===========================================
-   3. 布局结构（侧边栏、头部、内容区）
-=========================================== */
 /* 整体布局 */
 .main-layout {
   display: flex;
@@ -184,17 +174,10 @@ button {
   justify-content: center;
 }
 
-/* ===========================================
-   4. 业务模块样式（通知、统计、搜索、分页等）
-=========================================== */
 /* 通知 */
 .notice-item {
   padding: 16px;
   border-bottom: 1px solid var(--border);
-}
-.notice-item.unread {
-  background: rgba(230,162,60,0.05);
-  border-left: 4px solid var(--warning);
 }
 .notice-title {
   font-weight: 600;
@@ -226,9 +209,6 @@ button {
   color: var(--gray);
 }
 
-/* ===========================================
-   5. 响应式适配（手机/平板）
-=========================================== */
 @media (max-width: 768px) {
   .sidebar {
     position: fixed;
@@ -369,8 +349,9 @@ button {
     cursor: pointer;
 }
 .notice-item.unread {
-    background: rgba(230,162,60,0.08);
-    border-left: 4px solid var(--warning);
+    background: rgba(var(--warning-rgb), 0.08) !important;
+    border-left: 4px solid var(--warning) !important;
+    position: relative;
 }
 .compare-text {
     font-size: 12px;
@@ -433,15 +414,6 @@ button {
 .nav-link:hover {
     opacity: 0.8;
     text-decoration: underline;
-}
-
-/* 通知样式 */
-
-/* 未读通知：黄色背景 + 橙色左边框（与原有风格一致） */
-.notice-item.unread {
-    background: rgba(var(--warning-rgb), 0.08) !important;
-    border-left: 4px solid var(--warning) !important;
-    position: relative;
 }
 
 /* 已读通知置灰（保留） */

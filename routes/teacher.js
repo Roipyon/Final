@@ -384,7 +384,10 @@ router.put('/notices/:id',isTeacher,async(req,res)=>{
     }
     const { title, content } = req.body;
     if (!title || !content) {
-        return res.status(400).json({ success: false,message: '标题和内容不能为空' });
+        return res.status(400).json({ success: false, message: '标题和内容不能为空' });
+    }
+    if (title.length > 100) {
+        return res.status(400).json({ success: false, message: '标题不能超过100个字符' });
     }
     // 拿通知id
     const noticeId = parseInt(req.params.id);

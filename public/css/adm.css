@@ -135,8 +135,9 @@ button.btn-sm {
     transform: translateY(-2px);
 }
 .notice-item.unread {
-    background: rgba(var(--warning-rgb), 0.05);
-    border-left: 4px solid var(--warning);
+    background: rgba(var(--warning-rgb), 0.08) !important;
+    border-left: 4px solid var(--warning) !important;
+    position: relative;
 }
 .notice-title {
     font-weight: 600;
@@ -682,15 +683,6 @@ hr {
     flex: 1;
     height: 80px;
     border-radius: 16px;
-}
-
-/* 通知样式 */
-
-/* 未读通知：黄色背景 + 橙色左边框（与原有风格一致） */
-.notice-item.unread {
-    background: rgba(var(--warning-rgb), 0.08) !important;
-    border-left: 4px solid var(--warning) !important;
-    position: relative;
 }
 
 /* 已读通知置灰（保留） */

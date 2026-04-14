@@ -116,8 +116,6 @@ export const AdminRender = {
         return `<table class="table">${header}<tbody>${rows || '<tr><td colspan="8">暂无数据</td></tr>'}</tbody></table>`;
     },
 
-    // 在 AdminRender 对象内部添加以下方法（放在 scoreTable 方法后面即可）
-
     /**
      * 渲染成绩表格骨架屏
      * @param {number} rowCount - 骨架行数

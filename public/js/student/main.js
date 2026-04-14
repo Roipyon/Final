@@ -54,10 +54,18 @@ async function markAsRead(noticeId) {
     const notice = StudentState.notices.find(n => n.id === noticeId);
     if (notice && !notice.isRead) {
         notice.isRead = true;
-        await API.student.markNoticeRead(noticeId);
         updateUnreadBadge();
-        if (currentSection === 'notice') renderNoticeModule();
-        else if (currentSection === 'home') renderHomeModule();
+        try {
+            await API.student.markNoticeRead(noticeId);
+            // 成功，重新渲染当前模块
+            if (currentSection === 'notice') renderNoticeModule();
+            else if (currentSection === 'home') renderHomeModule();
+        } catch (err) {
+            // 回滚状态
+            notice.isRead = false;
+            updateUnreadBadge();
+            alert('标记已读失败，请稍后重试');
+        }
     }
 }
 
@@ -197,7 +205,6 @@ function renderNoticeModule() {
     const container = document.getElementById('noticeListContainer');
     container.innerHTML = '';
 
-    // 使用 NoticeCard 渲染当前页通知
     pageNotices.forEach(notice => {
         const isRead = notice.isRead === 1 || notice.isRead === true;
         const card = new NoticeCard(notice, {
