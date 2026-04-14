@@ -1,4 +1,5 @@
 const express = require('express');
+// const bcrypt = require('bcrypt');
 const router = express.Router();
 const pool = require('../utils/pool');
 const judge = /\w{8,}[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?`~]*/;
@@ -31,6 +32,15 @@ router.post('/',async(req,res)=>{
             res.json({ success: false, message: '当前账号与登录身份不匹配，请重新登录。'});
             return;
         };
+        // 哈希验证
+        // if (bcrypt.compare(password, rows[0].password))
+        // {
+        //     req.session.identity = rows[0].identity;
+        //     req.session.account = account;
+        //     if (req.session.identity === 'student') res.redirect('/student');
+        //     else if (req.session.identity === 'teacher') res.redirect('/teacher');
+        //     else if (req.session.identity === 'admin') res.redirect('/admin');
+        // }
         if (password === rows[0].password)
         {
             req.session.identity = rows[0].identity;
