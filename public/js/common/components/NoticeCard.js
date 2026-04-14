@@ -24,9 +24,8 @@ export class NoticeCard {
             showBadge: true,
             showActions: false,
             showReadStats: true,
-            isUnread: undefined,
-            isNew: undefined,
-            badgeText: null,
+            badgeMode: null,
+            badgeText: undefined,
             onEdit: null,
             onDelete: null,
             onExpand: null,
@@ -43,25 +42,52 @@ export class NoticeCard {
         const total = this.notice.totalStudents || this.notice.totalStu || 0;
         const read = this.notice.readCount || 0;
 
-        // 决定 isNew / isUnread 的优先级：以 options 中显式传入为准，否则自动计算
-        const isNew = this.options.isNew !== undefined ? this.options.isNew : this._isNewNotice(this.notice.publishTime);
-        const isUnread = this.options.isUnread !== undefined ? this.options.isUnread : (total > 0 && read < total);
+        // 根据模式计算 isUnread / isNew 及徽章文本
+        let isUnread = false;
+        let isNew = false;
+        let badgeText = '';
 
-        // 计算徽章文案：优先使用 badgeText（若传入），否则未读优先显示“未读”，再显示“新”
-        const computedBadgeText = (this.options.badgeText !== undefined && this.options.badgeText !== null)
-            ? this.options.badgeText
-            : (isUnread ? '未读' : (isNew ? '新' : ''));
-        const showBadgeFlag = this.options.showBadge && Boolean(computedBadgeText);
+        switch (this.options.badgeMode) {
+            case 'admin':
+                // 教务端：只看是否新通知（24h内）
+                isNew = this._isNewNotice(this.notice.publishTime);
+                badgeText = isNew ? '新' : '';
+                isUnread = false;   // 教务端不使用未读样式
+                break;
+
+            case 'teacher':
+                // 教师端：只看是否有未读学生（已读人数 < 总人数）
+                isUnread = (total > 0 && read < total);
+                badgeText = isUnread ? '未读' : '';
+                isNew = false;      // 教师端不显示“新”
+                break;
+
+            case 'student':
+            default:
+                // 学生端：优先判断未读，若无未读则判断是否新通知
+                isUnread = this.options.isUnread !== undefined 
+                    ? this.options.isUnread 
+                    : !this.notice.isRead;   // 假设 notice.isRead 字段存在
+                badgeText = isUnread ? '未读' : '';
+                break;
+        }
+
+        // 允许通过 options 直接覆盖徽章文本（优先级最高）
+        if (this.options.badgeText !== undefined) {
+            badgeText = this.options.badgeText;
+        }
+
+        const showBadge = this.options.showBadge && Boolean(badgeText);
 
         const container = document.createElement('div');
-        container.className = `notice-item ${isUnread ? 'unread' : ''}`;
+        container.className = `notice-item ${isUnread || isNew ? 'unread' : ''}`;
         container.dataset.id = this.notice.id;
 
         container.innerHTML = `
             <div class="notice-summary">
                 <span class="title">
                     ${escapeHtml(this.notice.title)}
-                    ${showBadgeFlag ? `<span class="notice-badge-sm" style="background: #e6a23c;">${escapeHtml(computedBadgeText)}</span>` : ''}
+                    ${showBadge ? `<span class="notice-badge-sm" style="background: #e6a23c;">${escapeHtml(badgeText)}</span>` : ''}
                 </span>
                 <span class="meta">${escapeHtml(this.notice.className)} · ${this._formatDate(this.notice.publishTime)}</span>
                 ${this.options.expandable ? '<span class="expand-icon">▼</span>' : ''}

@@ -210,6 +210,7 @@ function renderNoticeModule() {
         const card = new NoticeCard(notice, {
             expandable: true,
             showActions: false,
+            showReadStats: false,
             isUnread: !isRead,
             onExpand: (noticeId) => {
                 if (!isRead) {

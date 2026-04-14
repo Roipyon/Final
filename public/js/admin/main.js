@@ -133,7 +133,7 @@ async function renderDashboard() {
         const card = new NoticeCard(notice, {
             expandable: false,          // 首页不展开
             showActions: false,         // 无操作按钮
-            isUnread: false
+            badgeMode: 'admin'
         });
         card.mount(noticeContainer);
     });
@@ -350,7 +350,7 @@ function renderNoticeAll() {
             const card = new NoticeCard(notice, {
                 expandable: true,
                 showActions: false,    // 管理员无操作按钮
-                isUnread: false
+                badgeMode: 'admin'
             });
             card.mount(container);
         });

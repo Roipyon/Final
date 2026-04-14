@@ -79,7 +79,7 @@ async function renderHome() {
                 expandable: false,           // 首页不展开详情，节省空间
                 showActions: false,          // 无编辑/删除按钮
                 showReadStats: true,         // 显示已读人数
-                isUnread: hasUnread,         // 传递未读状态，用于样式高亮
+                badgeMode: 'teacher'
             });
             
             // 点击卡片跳转到通知管理页
@@ -202,6 +202,7 @@ async function renderNoticeModule() {
         const card = new NoticeCard(notice, {
             expandable: true,
             showActions: true,   // 显示编辑/删除按钮
+            badgeMode: 'teacher',
             onEdit: (n) => {
                 // 打开编辑模态框
                 openEditNoticeModal(n);
