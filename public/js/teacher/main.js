@@ -1,11 +1,11 @@
-// ================== 教师端主入口 ==================
+// 教师端主入口 
 import { TeacherState } from './state.js';
 import { TeacherRender } from './render.js';
 import { NoticeCard } from '../common/components/NoticeCard.js';
 
 let currentSection = 'home';
 
-// ---------- 数据加载 ----------
+//  数据加载 
 async function loadBaseData() {
     const info = await API.teacher.getInfo();
     TeacherState.currentTeacher = info;
@@ -32,7 +32,7 @@ async function refreshAllData(examDate = '') {
     TeacherState.subjectGeneral = subjectGeneral;
 }
 
-// ---------- 首页 ----------
+//  首页 
 async function renderHome() {
     const section = document.getElementById('homeSection');
     section.innerHTML = TeacherRender.homeSkeleton();
@@ -95,7 +95,7 @@ async function renderHome() {
     }
 }
 
-// ---------- 成绩管理 ----------
+//  成绩管理 
 async function renderScoreModule() {
     const section = document.getElementById('scoreSection');
     const isTotal = TeacherState.currentSubjectFilter === '总分';
@@ -174,7 +174,7 @@ function exportCSV() {
     a.click();
 }
 
-// ---------- 通知管理 ----------
+//  通知管理 
 async function renderNoticeModule() {
     const section = document.getElementById('noticeSection');
     section.innerHTML = TeacherRender.noticeSkeleton();
@@ -264,7 +264,7 @@ function showReadStatusModal(data) {
     document.getElementById('readStatusModal').style.display = 'flex';
 }
 
-// ---------- 日志 ----------
+//  日志 
 async function renderLogModule() {
     const section = document.getElementById('logSection');
     section.innerHTML = TeacherRender.logSkeleton();
@@ -298,7 +298,7 @@ async function renderLogModule() {
     });
 }
 
-// ---------- 模块切换 ----------
+//  模块切换 
 async function switchSection(sectionId) {
     currentSection = sectionId;
     document.querySelectorAll('.sidebar-menu a').forEach(l => l.classList.remove('active'));
@@ -322,7 +322,7 @@ async function switchSection(sectionId) {
     }
 }
 
-// ---------- 全局事件 ----------
+//  全局事件 
 function bindGlobalEvents() {
     document.addEventListener('click', async (e) => {
         if (e.target.matches('.sidebar-menu a, .nav-link')) {
@@ -441,7 +441,7 @@ function openEditNoticeModal(notice) {
 
 function closeModal(id) { document.getElementById(id).style.display = 'none'; }
 
-// ---------- 初始化 ----------
+//  初始化 
 async function init() {
     await loadBaseData();
     await refreshAllData();

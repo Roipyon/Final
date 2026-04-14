@@ -1,11 +1,11 @@
-// ================== 学生端主入口 ==================
+// 学生端主入口
 import { StudentState } from './state.js';
 import { StudentRender } from './render.js';
 import { NoticeCard } from '../common/components/NoticeCard.js';
 
 let currentSection = 'home';
 
-// ---------- 数据加载 ----------
+// 数据加载 
 async function loadBaseData() {
     const info = await API.student.getInfo();
     StudentState.currentStudent = info;
@@ -49,7 +49,7 @@ function getFilteredSortedNotices() {
     return filtered;
 }
 
-// ---------- 标记已读 ----------
+// 标记已读 
 async function markAsRead(noticeId) {
     const notice = StudentState.notices.find(n => n.id === noticeId);
     if (notice && !notice.isRead) {
@@ -74,7 +74,7 @@ function updateUnreadBadge() {
     document.querySelectorAll('.unread-badge').forEach(b => b.textContent = `${unread}条未读`);
 }
 
-// ---------- 首页 ----------
+// 首页 
 function renderHomeModule() {
     const section = document.getElementById('homeSection');
     section.innerHTML = StudentRender.homeSkeleton();
@@ -127,7 +127,7 @@ function renderHomeModule() {
     }
 }
 
-// ---------- 成绩模块 ----------
+// 成绩模块 
 async function renderScoreModule() {
     const section = document.getElementById('scoreSection');
     section.innerHTML = StudentRender.scoreSkeleton();
@@ -176,7 +176,7 @@ async function renderScoreModule() {
     });
 }
 
-// ---------- 通知模块 ----------
+// 通知模块 
 function renderNoticeModule() {
     const section = document.getElementById('noticeSection');
     section.innerHTML = StudentRender.noticeSkeleton();
@@ -251,7 +251,7 @@ function renderNoticeModule() {
     updateUnreadBadge();
 }
 
-// ---------- 模块切换 ----------
+// 模块切换 
 async function switchSection(sectionId) {
     currentSection = sectionId;
     document.querySelectorAll('.sidebar-menu a').forEach(l => l.classList.remove('active'));
@@ -274,7 +274,7 @@ async function switchSection(sectionId) {
     }
 }
 
-// ---------- 全局事件 ----------
+// 全局事件 
 function bindGlobalEvents() {
     document.addEventListener('click', (e) => {
         if (e.target.matches('.sidebar-menu a, .nav-link')) {
@@ -285,7 +285,7 @@ function bindGlobalEvents() {
     });
 }
 
-// ---------- 初始化 ----------
+// 初始化 
 async function init() {
     await loadBaseData();
     await refreshAllData();

@@ -1,4 +1,4 @@
-// ================== 教师端渲染函数 ==================
+// 教师端渲染函数 
 import { TeacherState } from './state.js';
 
 export const TeacherRender = {

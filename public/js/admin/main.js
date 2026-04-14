@@ -1,4 +1,4 @@
-// ================== 教务端主入口 ==================
+// 教务端主入口 
 
 import { AdminState, filterScores, sortScores, getAvailableSortFields } from './state.js';
 import { AdminRender } from './render.js';
@@ -6,7 +6,7 @@ import { NoticeCard } from '../common/components/NoticeCard.js';
 
 let currentSection = 'dashboard';
 
-// ---------- 数据加载 ----------
+// 数据加载 
 async function loadBaseData() {
     const [info, classes, teachers, grades, exams, notices, logs] = await Promise.all([
         API.admin.getInfo(),
@@ -102,7 +102,7 @@ function bindFilterBarEvents() {
     if (sortOrderBtn) sortOrderBtn.textContent = AdminState.currentSortOrder === 'asc' ? '↑' : '↓';
 }
 
-// ---------- 总览看板 ----------
+// 总览看板 
 async function renderDashboard() {
     const section = document.getElementById('dashboardSection');
     
@@ -169,7 +169,7 @@ async function renderDashboard() {
     });
 }
 
-// ---------- 班级管理 ----------
+// 班级管理 
 async function renderClassManage() {
     const section = document.getElementById('classManageSection');
     section.innerHTML = AdminRender.classManageSkeleton();
@@ -318,7 +318,7 @@ function openAddTeacherModal() {
     document.getElementById('addTeacherModal').style.display = 'flex';
 }
 
-// ---------- 全量通知 ----------
+// 全量通知 
 function renderNoticeAll() {
     const section = document.getElementById('noticeAllSection');
     section.innerHTML = AdminRender.noticeAllSkeleton();
@@ -366,7 +366,7 @@ function renderNoticeAll() {
     });
 }
 
-// ---------- 系统日志 ----------
+// 系统日志
 function renderSystemLog() {
     const section = document.getElementById('systemLogSection');
     section.innerHTML = AdminRender.systemLogSkeleton();
@@ -398,7 +398,7 @@ function renderSystemLog() {
     });
 }
 
-// ---------- 模块切换 ----------
+// 模块切换
 async function switchSection(sectionId) {
     currentSection = sectionId;
     document.querySelectorAll('.sidebar-menu a').forEach(l => l.classList.remove('active'));
@@ -421,7 +421,7 @@ async function switchSection(sectionId) {
     if (sidebar?.classList.contains('show')) sidebar.classList.remove('show');
 }
 
-// ---------- 全局事件绑定 ----------
+// 全局事件绑定
 function bindGlobalEvents() {
     // 导航链接点击
     document.addEventListener('click', (e) => {
@@ -801,7 +801,7 @@ async function importFromCSV(csvText) {
     await renderScoreAll();
 }
 
-// ---------- 绑定所有模态框事件（静态按钮）----------
+// 绑定所有模态框事件（静态按钮）
 function bindModalEvents() {
     // 新增班级
     document.getElementById('cancelAddClassBtn')?.addEventListener('click', () => closeModal('addClassModal'));
@@ -835,7 +835,7 @@ function bindModalEvents() {
     });
 }
 
-// ---------- 初始化 ----------
+// 初始化 
 async function init() {
     await loadBaseData();
     const header = AdminRender.headerInfo();

@@ -1,4 +1,4 @@
-// ================== 学生端渲染函数 ==================
+// 学生端渲染函数 
 import { StudentState } from './state.js';
 
 export const StudentRender = {

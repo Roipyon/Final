@@ -1,4 +1,4 @@
-// ================== 教师端全局状态 ==================
+// 教师端全局状态 
 export const TeacherState = {
     currentTeacher: null,
     className: '',

@@ -1,6 +1,3 @@
-// public/js/admin/render.js
-// ================== 教务端 HTML 渲染函数 ==================
-
 import { AdminState, getAvailableSortFields } from './state.js';
 
 export const AdminRender = {

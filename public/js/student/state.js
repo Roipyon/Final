@@ -1,4 +1,4 @@
-// ================== 学生端全局状态 ==================
+// 学生端全局状态 
 export const StudentState = {
     currentStudent: null,
     className: '',

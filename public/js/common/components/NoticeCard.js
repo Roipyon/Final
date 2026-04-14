@@ -1,4 +1,4 @@
-// ================== 通知卡片组件 ==================
+// 通知卡片组件
 // 使用示例：
 // const card = new NoticeCard(noticeData, { expandable: true, showActions: false });
 // card.mount(container);

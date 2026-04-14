@@ -1,4 +1,4 @@
-// ================== API 请求封装 ==================
+// API 请求封装
 const API = {
     async request(url, options = {}) {
         try {
@@ -39,7 +39,7 @@ const API = {
         window.location.href = '/logout';
     },
 
-    // ========== 教务端 ==========
+    // 教务端
     admin: {
         getInfo: () => API.request('/admin/info'),
         getClasses: () => API.request('/admin/classes'),
@@ -98,7 +98,7 @@ const API = {
         }),
     },
 
-    // ========== 教师端 ==========
+    // 教师端
     teacher: {
         getInfo: () => API.request('/teacher/info'),
         getExams: () => API.request('/teacher/exams'),
@@ -144,7 +144,7 @@ const API = {
         }),
     },
 
-    // ========== 学生端 ==========
+    // 学生端
     student: {
         getInfo: () => API.request('/student/info'),
         getExams: () => API.request('/student/exams'),
