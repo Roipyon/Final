@@ -745,22 +745,46 @@ function exportCSV() {
     a.click();
 }
 
-// 批量导入文件选择处理
+// 处理文件选择
 async function handleFileSelect(e) {
     const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = async (ev) => {
-        const csv = ev.target.result;
-        await importFromCSV(csv);
+        await importFromCSV(ev.target.result);
     };
     reader.readAsText(file, 'UTF-8');
 }
 
+// 简易 CSV 解析（处理引号内的逗号）
+function parseCSVLine(line) {
+    const result = [];
+    let cell = '';
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        if (char === '"') {
+            inQuotes = !inQuotes;
+        } else if (char === ',' && !inQuotes) {
+            result.push(cell.trim());
+            cell = '';
+        } else {
+            cell += char;
+        }
+    }
+    result.push(cell.trim());
+    return result;
+}
+
+// 批量导入核心
 async function importFromCSV(csvText) {
-    const lines = csvText.trim().split('\n');
-    if (lines.length < 2) { alert('CSV 至少需要表头和一行数据'); return; }
-    const headers = lines[0].split(',').map(h => h.trim());
+    const lines = csvText.trim().split('\n').filter(l => l.trim());
+    if (lines.length < 2) {
+        alert('CSV 至少需要表头和一行数据');
+        return;
+    }
+
+    const headers = parseCSVLine(lines[0]);
     const idx = {
         class: headers.indexOf('班级'),
         name: headers.indexOf('姓名'),
@@ -769,35 +793,71 @@ async function importFromCSV(csvText) {
         score: headers.indexOf('成绩'),
         date: headers.indexOf('考试日期')
     };
+
     if (idx.class === -1 || idx.name === -1 || idx.id === -1 || idx.subject === -1 || idx.score === -1) {
         alert('表头必须包含：班级,姓名,学号,科目,成绩');
         return;
     }
-    let success = 0, fail = 0;
+
+    const validRows = [];
     const errors = [];
+
+    // 第一遍：数据校验
     for (let i = 1; i < lines.length; i++) {
-        const cols = lines[i].split(',').map(c => c.trim());
+        const cols = parseCSVLine(lines[i]);
         if (cols.length < 5) continue;
-        const className = cols[idx.class];
-        const studentName = cols[idx.name];
-        const studentId = cols[idx.id];
-        const subject = cols[idx.subject];
+
+        const className = cols[idx.class] || '';
+        const studentName = cols[idx.name] || '';
+        const studentId = cols[idx.id] || '';
+        const subject = cols[idx.subject] || '';
         const score = parseFloat(cols[idx.score]);
         const examDate = cols[idx.date] || AdminState.currentExamDate || '';
-        if (!className || !studentName || !studentId || !subject || isNaN(score)) {
-            fail++;
-            errors.push(`第${i+1}行：数据不完整`);
-            continue;
-        }
-        try {
-            await API.admin.addScore({ className, studentName, studentId, subject, score, examDate });
-            success++;
-        } catch (err) {
-            fail++;
-            errors.push(`第${i+1}行：${err.message || '添加失败'}`);
+
+        if (!className || !studentName || !studentId || !subject) {
+            errors.push(`第${i+1}行：必填字段为空`);
+        } else if (subject === '总分') {
+            errors.push(`第${i+1}行：总分不可手动添加`);
+        } else if (isNaN(score) || score < 0) {
+            errors.push(`第${i+1}行：成绩必须为非负数字`);
+        } else {
+            validRows.push({ row: i+1, data: { className, studentName, studentId, subject, score, examDate } });
         }
     }
-    alert(`导入完成：成功 ${success} 条，失败 ${fail} 条。${errors.length ? '\n错误详情：\n' + errors.slice(0,5).join('\n') : ''}`);
+
+    if (validRows.length === 0) {
+        alert(`无有效数据可导入\n${errors.slice(0,5).join('\n')}`);
+        return;
+    }
+
+    // 第二遍：并发分批提交（每批 5 条）
+    const BATCH_SIZE = 5;
+    let success = 0;
+    const failErrors = [];
+
+    for (let i = 0; i < validRows.length; i += BATCH_SIZE) {
+        const batch = validRows.slice(i, i + BATCH_SIZE);
+        const results = await Promise.allSettled(
+            batch.map(item => API.admin.addScore(item.data))
+        );
+        results.forEach((result, index) => {
+            const row = batch[index].row;
+            if (result.status === 'fulfilled') {
+                success++;
+            } else {
+                failErrors.push(`第${row}行：${result.reason?.message || '添加失败'}`);
+            }
+        });
+    }
+
+    const totalFail = errors.length + failErrors.length;
+    let message = `导入完成：成功 ${success} 条，失败 ${totalFail} 条。`;
+    if (errors.length || failErrors.length) {
+        message += '\n\n错误详情（前5条）：\n';
+        message += [...errors, ...failErrors].slice(0, 5).join('\n');
+    }
+    alert(message);
+
     await renderScoreAll();
 }
 
