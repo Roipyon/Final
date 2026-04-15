@@ -47,7 +47,7 @@ const API = {
         getGrades: () => API.request('/admin/grades'),
         getExams: () => API.request('/admin/exams'),
         getNotices: () => API.request('/admin/notices'),
-        getLogs: () => API.request('/admin/logs'),
+        getLogs: (page = 1, pageSize = 15) => API.request(`/admin/logs?page=${page}&pageSize=${pageSize}`),
         getScores: (examDate = '') => {
             const url = examDate ? `/admin/scores?exam_date=${examDate}` : '/admin/scores';
             return API.request(url);

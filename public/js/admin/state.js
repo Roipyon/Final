@@ -31,6 +31,7 @@ export const AdminState = {
     // 日志分页
     currentLogPage: 1,
     logsPerPage: 15,
+    logTotal: 0,
     
     // 临时编辑ID
     currentEditScoreId: null,

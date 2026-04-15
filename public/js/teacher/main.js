@@ -315,6 +315,8 @@ async function renderLogModule() {
     const logs = data.logs;
     const totalPages = Math.ceil(data.total / TeacherState.logsPerPage);
     
+    const paginationHTML = renderSmartPagination(TeacherState.currentLogPage, totalPages);
+
     const html = `
         <h3>班级操作日志</h3>
         <div class="table-wrapper">
@@ -325,11 +327,7 @@ async function renderLogModule() {
                 </tbody>
             </table>
         </div>
-        <div class="pagination">
-            ${Array.from({length: totalPages}, (_, i) => `
-                <button class="page-btn ${i+1 === TeacherState.currentLogPage ? 'active-page' : ''}" data-page="${i+1}">${i+1}</button>
-            `).join('')}
-        </div>
+        ${paginationHTML}
     `;
     document.getElementById('logSection').innerHTML = html;
     

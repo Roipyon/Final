@@ -176,6 +176,17 @@ router.get('/notices',isAdmin,async(req,res)=>{
 
 // 获取全量日志
 router.get('/logs',isAdmin,async(req,res)=>{
+    // 当前页数
+    let page = parseInt(req.query.page) || 1;
+    // 每页 15 条
+    let pageSize = parseInt(req.query.pageSize) || 15;
+    // 跳过多少条（分页渲染）
+    const offset = (page - 1)*pageSize;
+    // 查总数
+    const [countRows] = await pool.query(`
+        select count(*) as total from operation_logs
+    `);
+    const total = countRows[0].total;
     const [logs] = await pool.query(`
         select
             u.real_name as operator,
@@ -185,8 +196,14 @@ router.get('/logs',isAdmin,async(req,res)=>{
         from operation_logs ol
         inner join users u on ol.user_id = u.id
         order by operateTime desc
-    `);
-    res.json(logs);
+        limit ? offset ?
+    `,[pageSize, offset]);
+    res.json({
+        logs: logs,
+        total: total,
+        page: page,
+        pageSize: pageSize
+    });
 });
 
 // 获取年级信息

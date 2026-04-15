@@ -18,7 +18,7 @@ async function loadBaseData() {
         API.admin.getGrades(),
         API.admin.getExams(),
         API.admin.getNotices(),
-        API.admin.getLogs()
+        API.admin.getLogs(1, AdminState.logsPerPage)
     ]);
     AdminState.currentAdmin = info;
     AdminState.classes = classes;
@@ -26,7 +26,8 @@ async function loadBaseData() {
     AdminState.gradeList = grades;
     AdminState.examList = exams;
     AdminState.allNotices = notices;
-    AdminState.systemLogs = logs;
+    AdminState.systemLogs = logs.logs;
+    AdminState.logTotal = logs.total;
     updateSubjects();
 }
 
@@ -150,12 +151,13 @@ async function renderDashboard() {
     // 骨架屏
     section.innerHTML = AdminRender.dashboardSkeleton();
     
-    // 确保数据已加载（如果已加载可跳过，但为保险起见重新获取最新统计）
-    // 注意：基础数据在 init 时已加载，这里只需刷新可能变化的数据
-    const [classes, notices, logs] = await Promise.all([
+    // 日志
+    const data = await API.admin.getLogs();
+    const logs = data.logs;
+
+    const [classes, notices] = await Promise.all([
         API.admin.getClasses(),
-        API.admin.getNotices(),
-        API.admin.getLogs()
+        API.admin.getNotices()
     ]);
     AdminState.classes = classes;
     AdminState.allNotices = notices;
@@ -412,28 +414,27 @@ function renderNoticeAll() {
 }
 
 // 系统日志
-function renderSystemLog() {
+async function renderSystemLog() {
     const section = document.getElementById('systemLogSection');
     section.innerHTML = AdminRender.systemLogSkeleton();
-    const logs = AdminState.systemLogs;
-    const totalPages = Math.ceil(logs.length / AdminState.logsPerPage);
-    const start = (AdminState.currentLogPage - 1) * AdminState.logsPerPage;
-    const pageLogs = logs.slice(start, start + AdminState.logsPerPage);
+
+    const data = await API.admin.getLogs(AdminState.currentLogPage, AdminState.logsPerPage);
+    AdminState.logTotal = data.total;
+    const logs = data.logs;
+    const totalPages = Math.ceil(data.total / AdminState.logsPerPage);
     
-    const rows = pageLogs.map(l => `
+    const rows = logs.map(l => `
         <tr><td>${escapeHtml(l.operator)}</td><td>${escapeHtml(l.operationType)}</td><td>${escapeHtml(l.content)}</td><td>${formatDateTime(l.operateTime)}</td></tr>
     `).join('');
     
-    const pagination = Array.from({ length: totalPages }, (_, i) => `
-        <button class="page-btn ${i+1 === AdminState.currentLogPage ? 'active-page' : ''}" data-page="${i+1}">${i+1}</button>
-    `).join('');
+    const paginationHTML = renderSmartPagination(AdminState.currentLogPage, totalPages);
     
     const html = `
         <h3>系统操作日志</h3>
         <div class="table-wrapper">
             <table class="table"><thead><tr><th>操作人</th><th>类型</th><th>内容</th><th>时间</th></tr></thead><tbody>${rows}</tbody></table>
         </div>
-        <div class="pagination">${pagination}</div>
+        ${paginationHTML}
     `;
     document.getElementById('systemLogSection').innerHTML = html;
     

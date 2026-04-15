@@ -291,6 +291,13 @@ button.btn-sm {
     justify-content: flex-end;
     gap: 8px;
     margin-top: 20px;
+    flex-wrap: wrap;
+}
+
+.page-ellipsis {
+    padding: 5px 8px;
+    color: var(--gray);
+    user-select: none;
 }
 
 .page-btn {
