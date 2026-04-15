@@ -3,6 +3,7 @@ import { TeacherState } from './state.js';
 import { TeacherRender } from './render.js';
 import { NoticeCard } from '../common/components/NoticeCard.js';
 import { openFilterDrawer, createFilterDrawer } from '../common/filterDrawer.js';
+import { WSClient } from '../common/websocket.js';
 
 let currentSection = 'home';
 
@@ -43,7 +44,7 @@ async function renderHome() {
     // 构建真实内容
     const html = `
         <h3>班级工作台 · ${escapeHtml(TeacherState.className || '未绑定班级')}</h3>
-        <p>欢迎 ${escapeHtml(TeacherState.currentTeacher?.name || '')} 老师</p>
+        <p>欢迎 ${escapeHtml(TeacherState.currentTeacher?.name || '')} 老师，助您更高效地管理本班。</p>
         <div class="stats-grid">
             <div class="stat-card"><div class="stat-value">${TeacherState.general.max}</div><div>最高分</div></div>
             <div class="stat-card"><div class="stat-value">${TeacherState.general.min}</div><div>最低分</div></div>
@@ -495,6 +496,17 @@ async function init() {
     
     document.getElementById('logoutBtn')?.addEventListener('click', () => API.logout());
     createFilterDrawer();
+
+    // 初始化 WebSocket
+    const wsClient = new WSClient(TeacherState.currentTeacher.id);
+
+    wsClient.on('READ_COUNT_UPDATE', async (data) => {
+        // 刷新通知数据
+        TeacherState.notices = await API.teacher.getNotices();
+        if (currentSection === 'notice') {
+            renderNoticeModule();
+        }
+    });
 }
 
 init();

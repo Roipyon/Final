@@ -216,7 +216,6 @@ router.post('/notices',isStudent,async(req,res)=>{
     const classId = classIdRow[0].class_id;
     const [update] = await pool.query('insert into notice_read_status (notice_id,student_id,is_read) values (?,?,?)',[notice_id,userId,is_read]);
     if (update.affectedRows === 1) {
-        res.json({success: true,message: '确认已读'});
         await addLog(
             userId,
             name,
@@ -225,6 +224,23 @@ router.post('/notices',isStudent,async(req,res)=>{
             `已读通知：${title}`,
             classId
         );
+        try {
+            const [noticeRows] = await pool.query(
+                'SELECT publisher_id FROM notices WHERE id = ?',
+                [notice_id]
+            );
+            if (noticeRows.length > 0) {
+                const teacherId = noticeRows[0].publisher_id;
+                const sendToUser = req.app.locals.sendToUser;
+                sendToUser(teacherId, {
+                    type: 'READ_COUNT_UPDATE',
+                    data: { noticeId: notice_id }
+                });
+            }
+        } catch (pushErr) {
+            console.error('WebSocket 推送失败:', pushErr);
+        }
+        res.json({success: true,message: '确认已读'});
     }
     else res.status(500).json({success: false,message: '已读失败'});
 });

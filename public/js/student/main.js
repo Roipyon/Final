@@ -3,6 +3,7 @@ import { StudentState } from './state.js';
 import { StudentRender } from './render.js';
 import { NoticeCard } from '../common/components/NoticeCard.js';
 import { openFilterDrawer, createFilterDrawer } from '../common/filterDrawer.js';
+import { WSClient } from '../common/websocket.js';
 
 let currentSection = 'home';
 
@@ -335,6 +336,31 @@ async function init() {
     
     document.getElementById('logoutBtn')?.addEventListener('click', () => API.logout());
     createFilterDrawer();
+
+    // 初始化 WebSocket
+    const wsClient = new WSClient(StudentState.currentStudent.id);
+
+    wsClient.on('NEW_NOTICE', async (data) => {
+        // 刷新通知列表
+        StudentState.notices = await API.student.getNotices();
+        updateUnreadBadge();
+        if (currentSection === 'notice') renderNoticeModule();
+        else if (currentSection === 'home') renderHomeModule();
+
+        // 桌面通知
+        if (Notification.permission === 'granted') {
+            new Notification('新班级通知', {
+                body: data.title,
+                icon: '/favicon.ico',
+                tag: 'notice'
+            });
+        }
+    });
+
+    // 请求桌面通知权限
+    if ('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission();
+    }
 }
 
 init();
