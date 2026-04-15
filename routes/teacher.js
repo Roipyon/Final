@@ -367,6 +367,9 @@ router.post('/notices',isTeacher,async(req,res)=>{
                 'SELECT student_id FROM class_members WHERE class_id = ? AND status = 1',
                 [classId]
             );
+            const [admins] = await pool.query(`
+                select id from users where identity = 'admin'
+            `);
             const sendToUser = req.app.locals.sendToUser;
             students.forEach(s => {
                 sendToUser(s.student_id, {
@@ -376,6 +379,15 @@ router.post('/notices',isTeacher,async(req,res)=>{
                         title: title
                     }
                 });
+            });
+            admins.forEach(a => {
+                sendToUser(a.id, {
+                    type: 'NEW_NOTICE',
+                    data: {
+                        noticeId: result.insertId,
+                        title: title
+                    }
+                })
             });
         } catch (pushErr) {
             // 推送失败不影响主流程，仅记录日志
