@@ -1,5 +1,4 @@
 const express = require('express');
-const path = require('path');
 const router = express.Router();
 const pool = require('../utils/pool');
 const addLog = require('../utils/logger');
