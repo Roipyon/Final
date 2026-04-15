@@ -322,6 +322,36 @@ function bindGlobalEvents() {
     });
 }
 
+function initNotificationPrompt() {
+    // 仅在支持 Notification 且权限为 'default' 时显示提示
+    if (!('Notification' in window)) return;
+    if (Notification.permission !== 'default') return;
+
+    // 创建一个浮动提示按钮（样式可自定义）
+    const promptDiv = document.createElement('div');
+    promptDiv.id = 'notificationPrompt';
+    promptDiv.style.cssText = `
+        position: fixed; bottom: 20px; right: 20px;
+        background: #4096ff; color: white; padding: 12px 20px;
+        border-radius: 30px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        cursor: pointer; z-index: 9999;
+    `;
+    promptDiv.textContent = '开启桌面通知';
+    
+    promptDiv.onclick = async () => {
+        const permission = await Notification.requestPermission();
+        if (permission === 'granted') {
+            promptDiv.remove();
+            // 可选：发送一条测试通知
+            new Notification('通知已开启', { body: '您将实时收到班级新通知' });
+        } else {
+            alert('无法开启通知，您可以在浏览器设置中手动允许');
+        }
+    };
+
+    document.body.appendChild(promptDiv);
+}
+
 // 初始化 
 async function init() {
     await loadBaseData();
@@ -358,9 +388,7 @@ async function init() {
     });
 
     // 请求桌面通知权限
-    if ('Notification' in window && Notification.permission === 'default') {
-        Notification.requestPermission();
-    }
+    initNotificationPrompt();
 }
 
 init();
