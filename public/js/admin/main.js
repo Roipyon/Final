@@ -4,6 +4,7 @@ import { AdminState, filterScores, sortScores, getAvailableSortFields } from './
 import { AdminRender } from './render.js';
 import { NoticeCard } from '../common/components/NoticeCard.js';
 import { openFilterDrawer, closeFilterDrawer, createFilterDrawer } from '../common/filterDrawer.js';
+import { WSClient } from '../common/websocket.js';
 
 let currentSection = 'dashboard';
 
@@ -951,6 +952,14 @@ async function init() {
     // 退出登录
     document.getElementById('logoutBtn')?.addEventListener('click', () => API.logout());
     createFilterDrawer();
+
+    const wsClient = new WSClient(AdminState.currentAdmin.id);
+    wsClient.on('NEW_NOTICE', async () => {
+        // 刷新全量通知数据
+        AdminState.allNotices = await API.admin.getNotices();
+        if (currentSection === 'noticeAll') renderNoticeAll();
+        else if (currentSection === 'dashboard') renderDashboard();
+    });
 }
 
 init();

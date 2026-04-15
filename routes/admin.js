@@ -12,9 +12,10 @@ router.use(isAdmin);
 // 获取当前用户信息
 router.get('/info',isAdmin,async(req,res)=>{
     const account = req.session.account;
-    const [rows] = await pool.query('select real_name from users where account = ?',[account]);
-    const { real_name: name } = rows[0];
+    const [rows] = await pool.query('select id,real_name from users where account = ?',[account]);
+    const { id: userId, real_name: name } = rows[0];
     res.json({
+        id: userId,
         name: name
     });
 });
