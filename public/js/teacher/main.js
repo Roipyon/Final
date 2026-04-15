@@ -4,6 +4,7 @@ import { TeacherRender } from './render.js';
 import { NoticeCard } from '../common/components/NoticeCard.js';
 import { openFilterDrawer, createFilterDrawer } from '../common/filterDrawer.js';
 import { WSClient } from '../common/websocket.js';
+import { Modal } from '../common/components/Modal.js';
 
 let currentSection = 'home';
 
@@ -195,7 +196,7 @@ async function renderScoreModule() {
 function exportCSV() {
     const isTotal = TeacherState.currentSubjectFilter === '总分';
     const data = isTotal ? TeacherState.scoresTotal : TeacherState.scoresData.filter(s => s.subject === TeacherState.currentSubjectFilter);
-    if (!data.length) return alert('无数据');
+    if (!data.length) return Modal.alert('无数据');
     
     let csv = isTotal ? "姓名,学号,总分,班级排名\n" : "姓名,学号,成绩,班级排名\n";
     data.forEach(s => {
@@ -246,7 +247,8 @@ async function renderNoticeModule() {
                 openEditNoticeModal(n);
             },
             onDelete: async (n) => {
-                if (!confirm('确定删除这条通知吗？')) return;
+                const confirmed = await Modal.confirm('确定删除这条通知吗？');
+                if (!confirmed) return;
                 await API.teacher.deleteNotice(n.id);
                 TeacherState.notices = await API.teacher.getNotices();
                 renderNoticeModule(); // 刷新列表
@@ -262,7 +264,7 @@ async function renderNoticeModule() {
     document.getElementById('publishNoticeBtn').addEventListener('click', async () => {
         const title = document.getElementById('newTitle').value.trim();
         const content = document.getElementById('newContent').value.trim();
-        if (!title || !content) return alert('请填写完整');
+        if (!title || !content) return Modal.alert('请填写完整');
         await API.teacher.publishNotice(title, content);
         TeacherState.notices = await API.teacher.getNotices();
         document.getElementById('newTitle').value = '';
@@ -426,14 +428,14 @@ async function confirmEditScore() {
     // 编辑成绩确认
     const newScore = parseFloat(Number(document.getElementById('editScore').value).toFixed(1));
     if (isNaN(newScore)) {
-        alert('请输入有效的数字');
+        Modal.alert('请输入有效的数字');
         return;
     }
     const subject = document.getElementById('editSubject').value;
     const scoreId = TeacherState.currentEditId;
     // 总分拦截
     if (subject === '总分') {
-        alert("总分由各科成绩自动计算，不可直接编辑");
+        Modal.alert("总分由各科成绩自动计算，不可直接编辑");
         closeModal('editScoreModal');
         return;
     }
@@ -442,7 +444,7 @@ async function confirmEditScore() {
         s.scoreId == scoreId && s.subject === subject
     );
     if (!scoreItem) {
-        alert('成绩记录不存在');
+        Modal.alert('成绩记录不存在');
         closeModal('editScoreModal');
         return;
     }
@@ -451,12 +453,13 @@ async function confirmEditScore() {
         const fullRes = await API.teacher.getFullMark(subject);
         const fullMark = Number(fullRes.full_mark) || 100;
         if (newScore < 0 || newScore > fullMark) {
-            alert(`请输入有效的成绩 (0-${fullMark})`);
+            Modal.alert(`请输入有效的成绩 (0-${fullMark})`);
             return;
         }
     } catch (e) {
         // 如果满分接口失败，询问用户是否继续
-        if (!confirm('无法获取科目满分，是否仍要提交？')) {
+        const confirmed = await Modal.confirm('无法获取科目满分，是否仍要提交？')
+        if (!confirmed) {
             return;
         }
     }
@@ -464,7 +467,7 @@ async function confirmEditScore() {
     // 提交更新
     try {
         const result = await API.teacher.updateScore(scoreId,newScore);
-            alert('成绩修改成功');
+            Modal.alert('成绩修改成功');
             closeModal('editScoreModal');
             await renderScoreModule();
             await renderHome();      // 同步更新首页统计

@@ -4,6 +4,7 @@ import { StudentRender } from './render.js';
 import { NoticeCard } from '../common/components/NoticeCard.js';
 import { openFilterDrawer, createFilterDrawer } from '../common/filterDrawer.js';
 import { WSClient } from '../common/websocket.js';
+import { Modal } from '../common/components/Modal.js';
 
 let currentSection = 'home';
 
@@ -66,7 +67,7 @@ async function markAsRead(noticeId) {
             // 回滚状态
             notice.isRead = false;
             updateUnreadBadge();
-            alert('标记已读失败，请稍后重试');
+            Modal.alert('标记已读失败，请稍后重试');
         }
     }
 }
@@ -345,7 +346,7 @@ function initNotificationPrompt() {
             // 可选：发送一条测试通知
             new Notification('通知已开启', { body: '您将实时收到班级新通知' });
         } else {
-            alert('无法开启通知，您可以在浏览器设置中手动允许');
+            Modal.alert('无法开启通知，您可以在浏览器设置中手动允许');
         }
     };
 
