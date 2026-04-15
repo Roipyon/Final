@@ -432,7 +432,7 @@ hr {
     margin-left: auto; /* 将排序控件推到右侧 */
 }
 
-/* ---------- 批量导入模态框专用样式 ---------- */
+/* 批量导入模态框专用样式 */
 
 /* 文件上传区域（可点击选择文件） */
 .file-upload-area {
@@ -640,7 +640,7 @@ hr {
     text-decoration: underline;
 }
 
-/* ========== 骨架屏样式 ========== */
+/* 骨架屏样式 */
 .skeleton {
     background: linear-gradient(
         90deg,

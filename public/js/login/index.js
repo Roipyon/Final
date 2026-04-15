@@ -1,3 +1,5 @@
+import { Modal } from "../common/components/Modal.js";
+
 const chooseBtn = document.querySelectorAll('.chooseBtn');
 const idShow = document.querySelector('#idShow');
 const loginBtn = document.querySelector('#loginBtn');
@@ -62,19 +64,19 @@ async function postInfo(ele1,ele2,identity)
 
     // 前端校验
     if (!account) {
-        alert('账号不能为空');
+        Modal.alert('账号不能为空');
         return;
     }
     if (!password) {
-        alert('密码不能为空');
+        Modal.alert('密码不能为空');
         return;
     }
     if (password.length < 8) {
-        alert('密码长度至少8位');
+        Modal.alert('密码长度至少8位');
         return;
     }
     if (!judge.test(password)) {
-        alert('密码必须包含数字');
+        Modal.alert('密码必须包含数字');
         return;
     }
     try {
@@ -95,12 +97,12 @@ async function postInfo(ele1,ele2,identity)
         const resJson = await response.json();
         if (!resJson.success) 
         {
-            alert(resJson.message || '登录失败，请检查账号和密码')
+            Modal.alert(resJson.message || '登录失败，请检查账号和密码')
             return;
         }
     } catch (err) {
         console.error('登录请求失败：',err);
-        alert('网络错误，无法连接到服务器，请稍后再试')
+        Modal.alert('网络错误，无法连接到服务器，请稍后再试')
     }
 }
 
