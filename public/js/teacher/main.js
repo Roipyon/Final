@@ -5,6 +5,7 @@ import { NoticeCard } from '../common/components/NoticeCard.js';
 import { openFilterDrawer, createFilterDrawer } from '../common/filterDrawer.js';
 import { WSClient } from '../common/websocket.js';
 import { Modal } from '../common/components/Modal.js';
+import { AdminState } from '../admin/state.js';
 
 let currentSection = 'home';
 
@@ -213,12 +214,29 @@ function exportCSV() {
     a.click();
 }
 
+function getFilteredSortedNotices() {
+    let filtered = TeacherState.notices;
+    if (TeacherState.noticeFilter === 'unread') {
+        filtered = filtered.filter(n => n.unreadCount > 0);
+    }
+    return [...filtered].sort((a, b) => new Date(b.publishTime) - new Date(a.publishTime));
+}
+
 //  通知管理 
 async function renderNoticeModule() {
     const section = document.getElementById('noticeSection');
     section.innerHTML = TeacherRender.noticeSkeleton();
 
-    const notices = TeacherState.notices;
+    const filtered = getFilteredSortedNotices();
+    const totalPages = Math.ceil(filtered.length / TeacherState.noticesPerPage);
+    if (TeacherState.currentNoticePage > totalPages) {
+        TeacherState.currentNoticePage = Math.max(1, totalPages);
+    }
+    const start = (TeacherState.currentNoticePage - 1) * TeacherState.noticesPerPage;
+    const pageNotices = filtered.slice(start, start + TeacherState.noticesPerPage);
+
+    const paginationHTML = renderSmartPagination(TeacherState.currentNoticePage, totalPages);
+
     const html = `
         <h3>班级通知管理</h3>
         <div class="card" style="background:#f9f9f9; padding:16px;">
@@ -228,16 +246,21 @@ async function renderNoticeModule() {
             <button id="publishNoticeBtn" class="btn-primary">发布通知</button>
         </div>
         <h4 style="margin-top:24px;">已发布通知</h4>
-        <div id="noticeListContainer">${TeacherRender.noticeList(notices)}</div>
+        <div>
+            <button class="filter-select ${TeacherState.noticeFilter === 'all' ? 'active-filter' : ''}" data-filter="all">全部</button>
+            <button class="filter-select ${TeacherState.noticeFilter === 'unread' ? 'active-filter' : ''}" data-filter="unread">未读</button>
+        </div>
+        <div id="noticeListContainer"></div>
+        ${paginationHTML}
     `;
-    document.getElementById('noticeSection').innerHTML = html;
+    section.innerHTML = html;
     
     // 获取容器
     const container = document.getElementById('noticeListContainer');
     container.innerHTML = ''; // 清空
     
     // 用 NoticeCard 组件渲染每条通知
-    notices.forEach(notice => {
+    pageNotices.forEach(notice => {
         const card = new NoticeCard(notice, {
             expandable: true,
             showActions: true,   // 显示编辑/删除按钮
@@ -259,6 +282,30 @@ async function renderNoticeModule() {
             }
         });
         card.mount(container);
+    });
+
+    const debouncedRenderNotice = debounce(()=>{
+        renderNoticeModule();
+    }, 200);
+
+    // 绑定分页按钮
+    document.querySelectorAll('#noticeSection .page-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const page = parseInt(btn.dataset.page);
+            if (page && page !== TeacherState.currentNoticePage) {
+                TeacherState.currentNoticePage = page;
+                debouncedRenderNotice();
+            }
+        });
+    });
+
+    // 绑定筛选按钮
+    document.querySelectorAll('[data-filter]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            TeacherState.noticeFilter = btn.dataset.filter;
+            TeacherState.currentNoticePage = 1;
+            renderNoticeModule();
+        });
     });
 
     document.getElementById('publishNoticeBtn').addEventListener('click', async(e) => {

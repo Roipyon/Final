@@ -14,6 +14,9 @@ export const TeacherState = {
     
     currentSubjectFilter: '总分',
     notices: [],
+    currentNoticePage: 1,
+    noticesPerPage: 10,
+    noticeFilter: 'all',
     
     currentLogPage: 1,
     logsPerPage: 15,

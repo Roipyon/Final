@@ -617,3 +617,8 @@ button.btn-sm {
     z-index: 2;
     white-space: nowrap;
 }
+.filter-select.active-filter {
+    background: var(--primary);
+    color: white;
+    border-color: var(--primary);
+}

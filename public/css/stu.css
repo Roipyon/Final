@@ -612,3 +612,8 @@ button {
     padding: 12px;
     font-size: 16px;
 }
+.filter-select.active-filter {
+    background: var(--primary) !important;
+    color: white !important;
+    border-color: var(--primary) !important;
+}

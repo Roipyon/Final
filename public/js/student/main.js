@@ -226,6 +226,8 @@ function renderNoticeModule() {
     const start = (StudentState.currentNoticePage - 1) * StudentState.noticesPerPage;
     const pageNotices = filtered.slice(start, start + StudentState.noticesPerPage);
 
+    const paginationHTML = renderSmartPagination(StudentState.currentNoticePage, totalPages);
+
     const html = `
         <div style="display:flex; justify-content:space-between;">
             <h3>班级通知 <span class="badge unread-badge">${getUnreadCount()}条未读</span></h3>
@@ -235,9 +237,9 @@ function renderNoticeModule() {
             </div>
         </div>
         <div id="noticeListContainer"></div>
-        <div class="pagination" id="noticePagination"></div>
+        ${paginationHTML}
     `;
-    document.getElementById('noticeSection').innerHTML = html;
+    section.innerHTML = html;
 
     const container = document.getElementById('noticeListContainer');
     container.innerHTML = '';
@@ -259,16 +261,6 @@ function renderNoticeModule() {
         card.mount(container);
     });
 
-    // 渲染分页
-    const paginationContainer = document.getElementById('noticePagination');
-    if (totalPages > 1) {
-        paginationContainer.innerHTML = Array.from({ length: totalPages }, (_, i) => `
-            <button class="page-btn ${i + 1 === StudentState.currentNoticePage ? 'active-page' : ''}" data-page="${i + 1}">${i + 1}</button>
-        `).join('');
-    } else {
-        paginationContainer.innerHTML = '';
-    }
-
     // 绑定筛选按钮
     document.querySelectorAll('[data-filter]').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -278,11 +270,18 @@ function renderNoticeModule() {
         });
     });
 
+    const debouncedRenderNotice = debounce(()=>{
+        renderNoticeModule();
+    }, 200);
+
     // 绑定分页按钮
-    document.querySelectorAll('#noticePagination .page-btn').forEach(btn => {
+    document.querySelectorAll('#noticeSection .page-btn').forEach(btn => {
         btn.addEventListener('click', () => {
-            StudentState.currentNoticePage = parseInt(btn.dataset.page);
-            renderNoticeModule();
+            const page = parseInt(btn.dataset.page);
+            if (page && page !== StudentState.currentNoticePage) {
+                StudentState.currentNoticePage = page;
+                debouncedRenderNotice();
+            }
         });
     });
 
