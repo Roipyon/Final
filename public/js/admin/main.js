@@ -11,31 +11,26 @@ let currentSection = 'dashboard';
 
 // 数据加载 
 async function loadBaseData() {
-    const [info, classes, teachers, grades, exams, notices, logs] = await Promise.all([
+    const [info, classes, teachers, grades, exams, notices, logs, subjects] = await Promise.all([
         API.admin.getInfo(),
         API.admin.getClasses(),
         API.admin.getTeachers(),
         API.admin.getGrades(),
         API.admin.getExams(),
-        API.admin.getNotices(),
-        API.admin.getLogs(1, AdminState.logsPerPage)
+        API.admin.getNotices({ page: 1, pageSize: 10 }),
+        API.admin.getLogs(1, AdminState.logsPerPage),
+        API.admin.getSubjects(),
     ]);
     AdminState.currentAdmin = info;
     AdminState.classes = classes;
     AdminState.allTeachers = teachers;
     AdminState.gradeList = grades;
     AdminState.examList = exams;
-    AdminState.allNotices = notices;
+    AdminState.allNotices = notices.data;
     AdminState.systemLogs = logs.logs;
     AdminState.logTotal = logs.total;
-    updateSubjects();
-}
-
-function updateSubjects() {
-    const subjectSet = new Set();
-    AdminState.allScores.forEach(s => subjectSet.add(s.subject));
-    subjectSet.add('总分');
-    AdminState.allSubjects = Array.from(subjectSet).sort();
+    AdminState.allSubjects = subjects;
+    AdminState.globalClassFilter = '所有班级';
     if (!AdminState.allSubjects.includes(AdminState.globalSubjectFilter)) {
         AdminState.globalSubjectFilter = AdminState.allSubjects[0] || '数学';
     }
@@ -45,11 +40,21 @@ async function loadScoresData() {
     if (AdminState.globalSubjectFilter === '总分') {
         const data = await API.admin.getTotalScores(AdminState.currentExamDate);
         AdminState.scoresTotal = data.map(item => ({ ...item, score: parseFloat(item.total_score) || 0 }));
+        AdminState.scoresTotalCount = data.length;
     } else {
-        const data = await API.admin.getScores(AdminState.currentExamDate);
-        AdminState.allScores = data.map(s => ({ ...s, score: parseFloat(s.score) || 0 }));
+        const params = {
+            exam_date: AdminState.currentExamDate,
+            class_name: AdminState.globalClassFilter,
+            subject: AdminState.globalSubjectFilter,
+            page: AdminState.scoresCurrentPage,
+            pageSize: AdminState.scoresPageSize,
+            sortField: AdminState.currentSortField,
+            sortOrder: AdminState.currentSortOrder
+        };
+        const res = await API.admin.getScores(params);
+        AdminState.allScores = res.data.map(s => ({ ...s, score: parseFloat(s.score) || 0 }));
+        AdminState.scoresTotalCount = res.total;
     }
-    updateSubjects();
 }
 
 async function renderScoreAll() {
@@ -68,9 +73,6 @@ async function renderScoreAll() {
         ${AdminRender.statsCardsSkeleton(isTotal)}
         ${AdminRender.scoreTableSkeleton(8)}
     `;
-    
-    // 筛选栏的事件绑定（因为 filterBar 是静态 HTML，需要在这里绑定事件）
-    bindFilterBarEvents();
 
     await loadScoresData();
     
@@ -79,6 +81,9 @@ async function renderScoreAll() {
     const stats = computeStats(displayData);
     const hasExamDate = !!AdminState.currentExamDate;
     displayData = sortScores(displayData, isTotal, hasExamDate);
+
+    const totalPages = Math.ceil(AdminState.scoresTotalCount / AdminState.scoresPageSize);
+    const paginationHTML = renderSmartPagination(AdminState.scoresCurrentPage, totalPages);
     
     section.innerHTML = `
         <h3>全量成绩管理 (跨班级)</h3>
@@ -91,8 +96,9 @@ async function renderScoreAll() {
         <div class="table-wrapper">
             ${AdminRender.scoreTable(displayData, isTotal, hasExamDate)}
         </div>
+        ${paginationHTML}
     `;
-    
+
     document.getElementById('mobileFilterBtn')?.addEventListener('click', () => {
         const filterBar = document.querySelector('.filter-bar');
         if (!filterBar) return;
@@ -132,6 +138,8 @@ async function renderScoreAll() {
 
 // 绑定筛选栏事件（因为重复渲染需要解绑/重绑）
 function bindFilterBarEvents() {
+    AdminState.scoresCurrentPage = 1;
+
     const examSelect = document.getElementById('examSelect');
     const classFilter = document.getElementById('classFilterAll');
     const subjectFilter = document.getElementById('subjectFilterAll');
@@ -151,14 +159,12 @@ async function renderDashboard() {
     // 骨架屏
     section.innerHTML = AdminRender.dashboardSkeleton();
     
-    // 日志
-    const data = await API.admin.getLogs();
-    const logs = data.logs;
+    const noticeData = await API.admin.getNotices({ page: 1, pageSize: 3 }); // 最新3条
+    const notices = noticeData.data;
+    const logsData = await API.admin.getLogs(1, 3);
+    const logs = logsData.logs;
+    const classes = await API.admin.getClasses();
 
-    const [classes, notices] = await Promise.all([
-        API.admin.getClasses(),
-        API.admin.getNotices()
-    ]);
     AdminState.classes = classes;
     AdminState.allNotices = notices;
     AdminState.systemLogs = logs;
@@ -366,21 +372,35 @@ function openAddTeacherModal() {
 }
 
 // 全量通知 
-function renderNoticeAll() {
+async function renderNoticeAll() {
     const section = document.getElementById('noticeAllSection');
     section.innerHTML = AdminRender.noticeAllSkeleton();
+
+    const params = {
+        page: AdminState.noticesCurrentPage,
+        pageSize: AdminState.noticesPageSize,
+        class_name: AdminState.globalClassFilter === '所有班级' ? 'all' : AdminState.globalClassFilter
+    };
     
-    const sorted = [...AdminState.allNotices].sort((a, b) => new Date(b.publishTime) - new Date(a.publishTime));
-    
-    // 构建筛选栏 + 容器外壳
+    const res = await API.admin.getNotices(params);
+    AdminState.allNotices = res.data;          // 当前页的通知数据
+    AdminState.noticesTotal = res.total;       // 符合条件的总通知数
+        
     let filterHtml = '<select id="classFilterNotice" class="filter-select"><option value="all">所有班级</option>';
-    AdminState.classes.forEach(c => { filterHtml += `<option value="${c.className}">${escapeHtml(c.className)}</option>`; });
+    AdminState.classes.forEach(c => {
+        const selected = AdminState.globalClassFilter === c.className ? 'selected' : '';
+        filterHtml += `<option value="${escapeHtml(c.className)}" ${selected}>${escapeHtml(c.className)}</option>`;
+    });
     filterHtml += '</select>';
     
+    const totalPages = Math.ceil(AdminState.noticesTotal / AdminState.noticesPageSize);
+    const paginationHTML = renderSmartPagination(AdminState.noticesCurrentPage, totalPages);
+
     const html = `
         <h3>全校班级通知</h3>
         <div class="filter-bar">${filterHtml}</div>
         <div id="noticeListContainer"></div>
+        ${paginationHTML}
     `;
     section.innerHTML = html;
     
@@ -402,15 +422,8 @@ function renderNoticeAll() {
             card.mount(container);
         });
     };
-    
-    renderCards(sorted);
-    
-    // 筛选事件
-    document.getElementById('classFilterNotice')?.addEventListener('change', (e) => {
-        const val = e.target.value;
-        const filtered = val === 'all' ? sorted : sorted.filter(n => n.className === val);
-        renderCards(filtered);
-    });
+
+    renderCards(AdminState.allNotices);
 }
 
 // 系统日志
@@ -520,6 +533,22 @@ function bindGlobalEvents() {
             }
         }
 
+        if (e.target.classList.contains('page-btn') && currentSection === 'noticeAll') {
+            const page = parseInt(e.target.dataset.page);
+            if (page && page !== AdminState.noticesCurrentPage) {
+                AdminState.noticesCurrentPage = page;
+                renderNoticeAll();
+            }
+        }
+
+        if (e.target.classList.contains('page-btn') && currentSection === 'scoreAll') {
+            const page = parseInt(e.target.dataset.page);
+            if (page && page !== AdminState.scoresCurrentPage) {
+                AdminState.scoresCurrentPage = page;
+                renderScoreAll();
+            }
+        }
+
         // 模态框遮罩关闭
         if (e.target.classList.contains('modal-mask')) {
             e.target.style.display = 'none';
@@ -536,6 +565,14 @@ function bindGlobalEvents() {
 
     // 下拉筛选和排序字段变更（事件委托）
     document.addEventListener('change', (e) => {
+        // 全量通知的班级筛选
+        if (e.target.id === 'classFilterNotice') {
+            AdminState.globalClassFilter = e.target.value;
+            AdminState.noticesCurrentPage = 1;
+            renderNoticeAll();
+            return;
+        }
+
         if (currentSection !== 'scoreAll') return;
 
         const target = e.target;

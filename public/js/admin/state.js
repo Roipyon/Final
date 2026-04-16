@@ -32,6 +32,16 @@ export const AdminState = {
     currentLogPage: 1,
     logsPerPage: 15,
     logTotal: 0,
+
+    // 成绩分页
+    scoresCurrentPage: 1,
+    scoresPageSize: 20,
+    scoresTotalCount: 0,
+
+    // 通知分页
+    noticesCurrentPage: 1,
+    noticesPageSize: 10,
+    noticesTotal: 0,
     
     // 临时编辑ID
     currentEditScoreId: null,

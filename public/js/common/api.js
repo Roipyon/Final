@@ -46,12 +46,16 @@ const API = {
         getTeachers: () => API.request('/admin/teachers'),
         getGrades: () => API.request('/admin/grades'),
         getExams: () => API.request('/admin/exams'),
-        getNotices: () => API.request('/admin/notices'),
-        getLogs: (page = 1, pageSize = 15) => API.request(`/admin/logs?page=${page}&pageSize=${pageSize}`),
-        getScores: (examDate = '') => {
-            const url = examDate ? `/admin/scores?exam_date=${examDate}` : '/admin/scores';
-            return API.request(url);
+        getNotices: (params = {}) => {
+            const query = new URLSearchParams(params).toString();
+            return API.request(`/admin/notices?${query}`);
         },
+        getLogs: (page = 1, pageSize = 15) => API.request(`/admin/logs?page=${page}&pageSize=${pageSize}`),
+        getScores: (params = {}) => {
+            const query = new URLSearchParams(params).toString();
+            return API.request(`/admin/scores?${query}`);
+        },
+        getSubjects: () => API.request(`/admin/subjects`),
         getTotalScores: (examDate = '') => {
             const url = examDate ? `/admin/totalscores?exam_date=${examDate}` : '/admin/totalscores';
             return API.request(url);

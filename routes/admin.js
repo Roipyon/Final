@@ -78,33 +78,142 @@ router.get('/teachers',isAdmin,async(req,res)=>{
 });
 
 // 获取全量成绩
+// router.get('/scores',isAdmin,async(req,res)=>{
+//     const examDate = req.query.exam_date;
+//     let sql = `
+//         SELECT
+//             s.id,
+//             CONCAT(g.grade_name, c.class_name) AS className,
+//             u.real_name AS studentName,
+//             u.id AS studentId,
+//             s.subject,
+//             s.score,
+//             s.exam_date,
+//             RANK() OVER (PARTITION BY s.class_id, s.subject ORDER BY s.score DESC) AS class_rank_subject,
+//             RANK() OVER (PARTITION BY s.subject, g.id ORDER BY s.score DESC) AS grade_rank_subject
+//         FROM scores s
+//         INNER JOIN users u ON s.student_id = u.id
+//         INNER JOIN classes c ON s.class_id = c.id
+//         INNER JOIN grades g ON g.id = c.grade_id
+//     `;
+//     let params = [];
+//     if (examDate) {
+//         sql += ` WHERE s.exam_date = ?`;
+//         params.push(examDate);
+//     }
+//     // 可选：按日期、班级、科目排序
+//     sql += ` ORDER BY s.exam_date DESC, c.id, s.subject, s.score DESC`;
+//     const [scores] = await pool.query(sql, params);
+//     res.json(scores);
+// });
+
 router.get('/scores',isAdmin,async(req,res)=>{
-    const examDate = req.query.exam_date;
-    let sql = `
-        SELECT
-            s.id,
-            CONCAT(g.grade_name, c.class_name) AS className,
-            u.real_name AS studentName,
-            u.id AS studentId,
-            s.subject,
-            s.score,
-            s.exam_date,
-            RANK() OVER (PARTITION BY s.class_id, s.subject ORDER BY s.score DESC) AS class_rank_subject,
-            RANK() OVER (PARTITION BY s.subject, g.id ORDER BY s.score DESC) AS grade_rank_subject
-        FROM scores s
-        INNER JOIN users u ON s.student_id = u.id
-        INNER JOIN classes c ON s.class_id = c.id
-        INNER JOIN grades g ON g.id = c.grade_id
-    `;
-    let params = [];
-    if (examDate) {
-        sql += ` WHERE s.exam_date = ?`;
-        params.push(examDate);
+    try {
+        const {
+            exam_date = '',
+            class_name = '所有班级',
+            subject = '',
+            page = 1,
+            pageSize = 20,
+            sortField = 'className',
+            sortOrder = 'asc'
+        } = req.query;
+
+        const limit = parseInt(pageSize);
+        const offset = (parseInt(page) - 1) * limit;
+
+        // 构建 WHERE 条件
+        const conditions = [];
+        const params = [];
+
+        if (exam_date) {
+            conditions.push('s.exam_date = ?');
+            params.push(exam_date);
+        }
+        if (class_name && class_name !== '所有班级') {
+            conditions.push('CONCAT(g.grade_name, c.class_name) = ?');
+            params.push(class_name);
+        }
+        if (subject && subject !== '总分') {
+            conditions.push('s.subject = ?');
+            params.push(subject);
+        }
+
+        const whereSQL = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
+
+        // 排序字段映射
+        const sortMap = {
+            className: 'className',
+            studentId: 'u.account',
+            studentName: 'u.real_name',
+            subjectScore: 's.score'
+        };
+        const orderBy = sortMap[sortField] || 'className';
+        const direction = sortOrder === 'asc' ? 'ASC' : 'DESC';
+
+        // 查询总数
+        const countSQL = `
+            SELECT COUNT(*) AS total
+            FROM scores s
+            INNER JOIN users u ON s.student_id = u.id
+            INNER JOIN classes c ON s.class_id = c.id
+            INNER JOIN grades g ON g.id = c.grade_id
+            ${whereSQL}
+        `;
+        const [countRows] = await pool.query(countSQL, params);
+        const total = countRows[0].total;
+
+        // 查询分页数据
+        const dataSQL = `
+            SELECT
+                s.id,
+                CONCAT(g.grade_name, c.class_name) AS className,
+                u.real_name AS studentName,
+                u.account AS studentId,
+                s.subject,
+                s.score,
+                s.exam_date,
+                RANK() OVER (PARTITION BY s.class_id, s.subject ORDER BY s.score DESC) AS class_rank_subject,
+                RANK() OVER (PARTITION BY s.subject, g.id ORDER BY s.score DESC) AS grade_rank_subject
+            FROM scores s
+            INNER JOIN users u ON s.student_id = u.id
+            INNER JOIN classes c ON s.class_id = c.id
+            INNER JOIN grades g ON g.id = c.grade_id
+            ${whereSQL}
+            ORDER BY ${orderBy} ${direction}
+            LIMIT ? OFFSET ?
+        `;
+        const dataParams = [...params, limit, offset];
+        const [scores] = await pool.query(dataSQL, dataParams);
+
+        res.json({
+            data: scores,
+            total,
+            page: parseInt(page),
+            pageSize: limit
+        });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ success: false, message: '查询失败' });
     }
-    // 可选：按日期、班级、科目排序
-    sql += ` ORDER BY s.exam_date DESC, c.id, s.subject, s.score DESC`;
-    const [scores] = await pool.query(sql, params);
-    res.json(scores);
+});
+
+// 获取所有科目
+router.get('/subjects', isAdmin, async (req, res) => {
+    try {
+        const [rows] = await pool.query(`
+            SELECT DISTINCT subject
+            FROM scores
+            ORDER BY subject
+        `);
+        const subjects = rows.map(r => r.subject);
+        // 总分始终作为一个选项
+        subjects.unshift('总分');
+        res.json(subjects);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json([]);
+    }
 });
 
 // 获取全量总分（跨班级）
@@ -144,33 +253,89 @@ router.get('/totalscores', isAdmin, async(req,res)=>{
 });
 
 // 获取全量通知
+// router.get('/notices',isAdmin,async(req,res)=>{
+//     const [notices] = await pool.query(`
+//         select
+//             n.id,
+//             concat (g.grade_name, c.class_name) as className,
+//             n.title,
+//             n.content,
+//             n.publish_time as publishTime,
+//             u.real_name as teacher_name,
+//             (
+//                 SELECT COUNT(*)
+//                 FROM notice_read_status rs
+//                 WHERE rs.notice_id = n.id AND rs.is_read = 1
+//             ) AS readCount,
+//             (
+//                 SELECT COUNT(*)
+//                 FROM class_members cm
+//                 WHERE cm.class_id = n.class_id AND cm.status = 1
+//             ) AS totalStu
+//         FROM notices n
+//         inner join classes c on n.class_id = c.id
+//         inner join grades g on g.id = c.grade_id
+//         inner join users u on n.publisher_id = u.id
+//         WHERE n.is_deleted = 0
+//         ORDER BY n.publish_time DESC
+//     `);
+//     res.json(notices);
+// });
+
 router.get('/notices',isAdmin,async(req,res)=>{
-    const [notices] = await pool.query(`
-        select
-            n.id,
-            concat (g.grade_name, c.class_name) as className,
-            n.title,
-            n.content,
-            n.publish_time as publishTime,
-            u.real_name as teacher_name,
-            (
-                SELECT COUNT(*)
-                FROM notice_read_status rs
-                WHERE rs.notice_id = n.id AND rs.is_read = 1
-            ) AS readCount,
-            (
-                SELECT COUNT(*)
-                FROM class_members cm
-                WHERE cm.class_id = n.class_id AND cm.status = 1
-            ) AS totalStu
-        FROM notices n
-        inner join classes c on n.class_id = c.id
-        inner join grades g on g.id = c.grade_id
-        inner join users u on n.publisher_id = u.id
-        WHERE n.is_deleted = 0
-        ORDER BY n.publish_time DESC
-    `);
-    res.json(notices);
+    const { page = 1, pageSize = 10, class_name = 'all' } = req.query;
+    const limit = parseInt(pageSize);
+    const offset = (parseInt(page) - 1) * limit;
+
+    try {
+        // 构建班级筛选条件
+        let classCondition = '';
+        const params = [];
+
+        if (class_name && class_name !== 'all')
+        {
+            classCondition = `and concat(g.grade_name, c.class_name) = ?`;
+            params.push(class_name);
+        }
+
+        const [countRows] = await pool.query(`
+            SELECT COUNT(*) AS total 
+            FROM notices n
+            INNER JOIN classes c ON n.class_id = c.id
+            INNER JOIN grades g ON g.id = c.grade_id
+            WHERE n.is_deleted = 0 ${classCondition}
+        `, params);
+        const total = countRows[0].total;
+
+        const [notices] = await pool.query(`
+            SELECT
+                n.id,
+                CONCAT(g.grade_name, c.class_name) AS className,
+                n.title,
+                n.content,
+                n.publish_time AS publishTime,
+                u.real_name AS teacher_name,
+                (SELECT COUNT(*) FROM notice_read_status rs WHERE rs.notice_id = n.id AND rs.is_read = 1) AS readCount,
+                (SELECT COUNT(*) FROM class_members cm WHERE cm.class_id = n.class_id AND cm.status = 1) AS totalStu
+            FROM notices n
+            INNER JOIN classes c ON n.class_id = c.id
+            INNER JOIN grades g ON g.id = c.grade_id
+            INNER JOIN users u ON n.publisher_id = u.id
+            WHERE n.is_deleted = 0 ${classCondition}
+            ORDER BY n.publish_time DESC
+            LIMIT ? OFFSET ?
+        `, [...params, limit, offset]);
+
+        res.json({ 
+            data: notices, 
+            total, 
+            page: parseInt(page), 
+            pageSize: limit 
+        });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json([]);
+    }
 });
 
 // 获取全量日志
