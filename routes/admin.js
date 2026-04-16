@@ -32,6 +32,15 @@ router.get('/exams',isAdmin,async(req,res)=>{
 // 获取班级信息
 router.get('/classes',isAdmin,async(req,res)=>{
     try {
+        const { page = 1, pageSize = 10 } = req.query;
+        const limit = parseInt(pageSize);
+        const offset = (parseInt(page) - 1) * limit;
+
+        // 查询总数
+        const [countRows] = await pool.query(`SELECT COUNT(*) AS total FROM classes`);
+        const total = countRows[0].total;
+
+        // 分页查询班级信息
         const [rows] = await pool.query(`
             SELECT 
                 c.id,
@@ -47,8 +56,9 @@ router.get('/classes',isAdmin,async(req,res)=>{
             LEFT JOIN class_members cm ON cm.class_id = c.id AND cm.status = 1
             GROUP BY c.id
             ORDER BY g.sort_order, c.id
-        `);
-        // 前端显示用拼接名
+            LIMIT ? OFFSET ?
+        `, [limit, offset]);
+
         const classes = rows.map(row => ({
             id: row.id,
             className: `${row.grade_name}${row.rawClassName}`,
@@ -57,9 +67,16 @@ router.get('/classes',isAdmin,async(req,res)=>{
             gradeName: row.grade_name,
             teacher: row.teacher || '',
             teacherId: row.teacherId,
-            studentCount: row.studentCount
+            studentCount: row.studentCount,
+            students: []           // 初始不加载学生
         }));
-        res.json(classes);
+
+        res.json({ 
+            data: classes, 
+            total, 
+            page: parseInt(page), 
+            pageSize: limit 
+        });
     } catch (err) {
         console.error(err);
         res.status(500).json([]);
@@ -76,36 +93,6 @@ router.get('/teachers',isAdmin,async(req,res)=>{
     `);
     res.json(teachers);
 });
-
-// 获取全量成绩
-// router.get('/scores',isAdmin,async(req,res)=>{
-//     const examDate = req.query.exam_date;
-//     let sql = `
-//         SELECT
-//             s.id,
-//             CONCAT(g.grade_name, c.class_name) AS className,
-//             u.real_name AS studentName,
-//             u.id AS studentId,
-//             s.subject,
-//             s.score,
-//             s.exam_date,
-//             RANK() OVER (PARTITION BY s.class_id, s.subject ORDER BY s.score DESC) AS class_rank_subject,
-//             RANK() OVER (PARTITION BY s.subject, g.id ORDER BY s.score DESC) AS grade_rank_subject
-//         FROM scores s
-//         INNER JOIN users u ON s.student_id = u.id
-//         INNER JOIN classes c ON s.class_id = c.id
-//         INNER JOIN grades g ON g.id = c.grade_id
-//     `;
-//     let params = [];
-//     if (examDate) {
-//         sql += ` WHERE s.exam_date = ?`;
-//         params.push(examDate);
-//     }
-//     // 可选：按日期、班级、科目排序
-//     sql += ` ORDER BY s.exam_date DESC, c.id, s.subject, s.score DESC`;
-//     const [scores] = await pool.query(sql, params);
-//     res.json(scores);
-// });
 
 router.get('/scores',isAdmin,async(req,res)=>{
     try {
@@ -375,36 +362,6 @@ router.get('/totalscores',isAdmin,async(req,res)=>{
         res.status(500).json({ success: false, message: '查询失败' });
     }
 });
-
-// 获取全量通知
-// router.get('/notices',isAdmin,async(req,res)=>{
-//     const [notices] = await pool.query(`
-//         select
-//             n.id,
-//             concat (g.grade_name, c.class_name) as className,
-//             n.title,
-//             n.content,
-//             n.publish_time as publishTime,
-//             u.real_name as teacher_name,
-//             (
-//                 SELECT COUNT(*)
-//                 FROM notice_read_status rs
-//                 WHERE rs.notice_id = n.id AND rs.is_read = 1
-//             ) AS readCount,
-//             (
-//                 SELECT COUNT(*)
-//                 FROM class_members cm
-//                 WHERE cm.class_id = n.class_id AND cm.status = 1
-//             ) AS totalStu
-//         FROM notices n
-//         inner join classes c on n.class_id = c.id
-//         inner join grades g on g.id = c.grade_id
-//         inner join users u on n.publisher_id = u.id
-//         WHERE n.is_deleted = 0
-//         ORDER BY n.publish_time DESC
-//     `);
-//     res.json(notices);
-// });
 
 router.get('/notices',isAdmin,async(req,res)=>{
     const { page = 1, pageSize = 10, class_name = 'all' } = req.query;

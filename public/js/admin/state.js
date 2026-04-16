@@ -51,6 +51,11 @@ export const AdminState = {
     currentEditScoreId: null,
     currentEditClassId: null,
     currentAddStudentClassId: null,
+
+    // 班级分页
+    classesCurrentPage: 1,
+    classesPageSize: 10,
+    classesTotal: 0,
 };
 
 // 辅助函数：获取当前可用的排序字段

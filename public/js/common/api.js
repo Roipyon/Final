@@ -42,7 +42,10 @@ const API = {
     // 教务端
     admin: {
         getInfo: () => API.request('/admin/info'),
-        getClasses: () => API.request('/admin/classes'),
+        getClasses: (params = {}) => {
+            const query = new URLSearchParams(params).toString();
+            return API.request(`/admin/classes?${query}`);
+        },        
         getTeachers: () => API.request('/admin/teachers'),
         getGrades: () => API.request('/admin/grades'),
         getExams: () => API.request('/admin/exams'),

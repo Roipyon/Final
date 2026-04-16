@@ -11,6 +11,11 @@ let currentSection = 'dashboard';
 
 // 数据加载 
 async function loadBaseData() {
+
+    // 获取全量班级（用于下拉框筛选），一次性取足够大的 pageSize
+    const classesRes = await API.admin.getClasses({ pageSize: 1000 });
+    const allClasses = classesRes.data;   // 全量班级数据
+
     const [info, classes, teachers, grades, exams, notices, logs, subjects] = await Promise.all([
         API.admin.getInfo(),
         API.admin.getClasses(),
@@ -22,7 +27,7 @@ async function loadBaseData() {
         API.admin.getSubjects(),
     ]);
     AdminState.currentAdmin = info;
-    AdminState.classes = classes;
+    AdminState.classes = allClasses;
     AdminState.allTeachers = teachers;
     AdminState.gradeList = grades;
     AdminState.examList = exams;
@@ -185,11 +190,11 @@ async function renderDashboard() {
     const notices = noticeData.data;
     const logsData = await API.admin.getLogs(1, 3);
     const logs = logsData.logs;
-    const classes = await API.admin.getClasses();
 
-    AdminState.classes = classes;
     AdminState.allNotices = notices;
     AdminState.systemLogs = logs;
+
+    const classes = AdminState.classes;
     
     // 真实渲染
     const totalClasses = classes.length;
@@ -246,45 +251,37 @@ async function renderDashboard() {
 async function renderClassManage() {
     const section = document.getElementById('classManageSection');
     section.innerHTML = AdminRender.classManageSkeleton();
-    // 刷新班级数据
-    const classes = await API.admin.getClasses();
-    AdminState.classes = classes;
+
+    const params = {
+        page: AdminState.classesCurrentPage,
+        pageSize: AdminState.classesPageSize
+    };
+    const res = await API.admin.getClasses(params);
+    AdminState.classes = res.data;
+    AdminState.classesTotal = res.total;
     
-    // 获取每个班级的学生
-    for (let c of AdminState.classes) {
-        try {
-            const students = await API.request(`/admin/classes/${c.id}/students`);
-            c.students = Array.isArray(students) ? students : [];
-        } catch (e) {
-            console.warn(`获取班级 ${c.id} 学生失败:`, e);
-            c.students = [];
-        }
-        c.studentCount = c.students.length;
-    }
-    
+    // 生成班级卡片 HTML
     let classListHtml = '';
     for (let c of AdminState.classes) {
-        let studentListHtml = '';
-        for (let s of (c.students || [])) {
-            studentListHtml += `
-                <div class="student-item" style="display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid #eee;">
-                    <span>${escapeHtml(s.name)} (${escapeHtml(s.studentId)})</span>
-                    <button class="btn-sm btn-danger delete-student-btn" data-class-id="${c.id}" data-student-id="${s.id}">删除</button>
-                </div>
-            `;
-        }
-        if (!studentListHtml) studentListHtml = '<div class="empty-tip">暂无学生</div>';
+        // 学生列表容器，初始为空，点击后加载
+        const studentContainerId = `student-list-${c.id}`;
         
         let teacherOptions = '<option value="">-- 绑定教师 --</option>';
         AdminState.allTeachers.forEach(t => {
             const selected = c.teacherId === t.id ? 'selected' : '';
             teacherOptions += `<option value="${t.id}" ${selected}>${escapeHtml(t.name)}</option>`;
         });
-        
+
         classListHtml += `
             <div class="class-card" style="border:1px solid #ddd; border-radius:12px; padding:16px; margin-bottom:20px;">
                 <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <div><strong>${escapeHtml(c.className)}</strong> (${c.studentCount}人) 班主任: ${escapeHtml(c.teacher || '未绑定')}</div>
+                    <div>
+                        <strong>${escapeHtml(c.className)}</strong> (${c.studentCount}人) 
+                        班主任: ${escapeHtml(c.teacher || '未绑定')}
+                        <button class="btn-sm toggle-student-btn" data-class-id="${c.id}" data-loaded="false">
+                            ▼ 展开学生
+                        </button>
+                    </div>
                     <div>
                         <select class="bind-teacher-select" data-classid="${c.id}">${teacherOptions}</select>
                         <button class="btn-sm btn-danger delete-class-btn" data-id="${c.id}">删除班级</button>
@@ -292,9 +289,8 @@ async function renderClassManage() {
                         <button class="btn-sm btn-primary add-student-btn" data-class-id="${c.id}">+ 添加学生</button>
                     </div>
                 </div>
-                <div style="margin-top:16px;">
-                    <h5>班级成员</h5>
-                    <div class="student-list">${studentListHtml}</div>
+                <div id="${studentContainerId}" class="student-list-container" style="margin-top:16px; display:none;">
+                    <div class="skeleton">加载中...</div>
                 </div>
             </div>
         `;
@@ -304,6 +300,9 @@ async function renderClassManage() {
     AdminState.allTeachers.forEach(t => {
         teacherPoolHtml += `<span style="display:inline-block; background:#f0f0f0; padding:4px 12px; border-radius:20px; margin:4px;">${escapeHtml(t.name)}</span>`;
     });
+
+    const totalPages = Math.ceil(AdminState.classesTotal / AdminState.classesPageSize);
+    const paginationHTML = renderSmartPagination(AdminState.classesCurrentPage, totalPages);
     
     const html = `
         <h3>班级管理与教师绑定</h3>
@@ -313,12 +312,108 @@ async function renderClassManage() {
         </div>
         <h4>现有班级列表</h4>
         <div id="classListContainer">${classListHtml || '<div class="empty-tip">暂无班级</div>'}</div>
+        ${paginationHTML}
         <hr>
         <h4>教师池管理</h4>
         <button id="openAddTeacherBtn" class="btn-sm">+ 添加教师</button>
         <div style="margin-top:12px;">${teacherPoolHtml}</div>
     `;
-    document.getElementById('classManageSection').innerHTML = html;
+    section.innerHTML = html;
+
+    // 绑定展开/收起学生事件
+    section.addEventListener('click', async (e) => {
+        // 处理展开/收起学生
+        const toggleBtn = e.target.closest('.toggle-student-btn');
+        if (toggleBtn) {
+            const classId = toggleBtn.dataset.classId;
+            const container = document.getElementById(`student-list-${classId}`);
+            const isLoaded = toggleBtn.dataset.loaded === 'true';
+
+            if (container.style.display === 'none') {
+                container.style.display = 'block';
+                toggleBtn.textContent = '▲ 收起学生';
+
+                if (!isLoaded) {
+                    try {
+                        const students = await API.request(`/admin/classes/${classId}/students`);
+                        const classData = AdminState.classes.find(c => c.id == classId);
+                        if (classData) classData.students = students;
+
+                        let studentHtml = '';
+                        students.forEach(s => {
+                            studentHtml += `
+                                <div class="student-item" style="display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid #eee;">
+                                    <span>${escapeHtml(s.name)} (${escapeHtml(s.studentId)})</span>
+                                    <button class="btn-sm btn-danger delete-student-btn" data-class-id="${classId}" data-student-id="${s.id}">删除</button>
+                                </div>
+                            `;
+                        });
+                        container.innerHTML = studentHtml || '<div class="empty-tip">暂无学生</div>';
+                        toggleBtn.dataset.loaded = 'true';
+                    } catch (err) {
+                        container.innerHTML = '<div class="empty-tip">加载失败</div>';
+                    }
+                }
+            } else {
+                container.style.display = 'none';
+                toggleBtn.textContent = '▼ 展开学生';
+            }
+            return; // 处理完展开就结束
+        }
+
+        // 处理删除学生
+        const deleteBtn = e.target.closest('.delete-student-btn');
+        if (deleteBtn) {
+            e.preventDefault();
+            e.stopPropagation();
+            const classId = deleteBtn.dataset.classId;
+            const studentId = deleteBtn.dataset.studentId;
+
+            const confirmed = await Modal.confirm('确定删除该学生吗？');
+            if (!confirmed) return;
+
+            try {
+                await API.admin.deleteStudent(classId, studentId);
+                
+                // 重新获取该班级学生列表并刷新容器
+                const container = document.getElementById(`student-list-${classId}`);
+                if (container) {
+                    const students = await API.request(`/admin/classes/${classId}/students`);
+                    const classData = AdminState.classes.find(c => c.id == classId);
+                    if (classData) classData.students = students;
+
+                    let html = '';
+                    students.forEach(s => {
+                        html += `
+                            <div class="student-item" style="display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid #eee;">
+                                <span>${escapeHtml(s.name)} (${escapeHtml(s.studentId)})</span>
+                                <button class="btn-sm btn-danger delete-student-btn" data-class-id="${classId}" data-student-id="${s.id}">删除</button>
+                            </div>
+                        `;
+                    });
+                    container.innerHTML = html || '<div class="empty-tip">暂无学生</div>';
+                }
+
+                // 更新班级卡片上显示的学生人数
+                const card = deleteBtn.closest('.class-card');
+                if (card) {
+                    const strongEl = card.querySelector('strong');
+                    if (strongEl) {
+                        const text = strongEl.nextSibling?.textContent || '';
+                        const match = text.match(/\((\d+)人\)/);
+                        if (match) {
+                            const newCount = parseInt(match[1]) - 1;
+                            strongEl.nextSibling.textContent = text.replace(/\d+/, newCount);
+                        }
+                    }
+                }
+                Modal.alert('删除成功');
+            } catch (err) {
+                Modal.alert(err.message || '删除失败');
+            }
+            return;
+        }
+    });
     
     // 绑定事件
     document.getElementById('openAddClassBtn')?.addEventListener('click', openAddClassModal);
@@ -367,16 +462,6 @@ async function renderClassManage() {
             document.getElementById('studentName').value = '';
             document.getElementById('studentId').value = '';
             document.getElementById('addStudentModal').style.display = 'flex';
-        });
-    });
-    
-    document.querySelectorAll('.delete-student-btn').forEach(btn => {
-        btn.addEventListener('click', async () => {
-            const confirmed = await Modal.confirm('确定删除该学生吗？');
-            if (confirmed) {
-                await API.admin.deleteStudent(btn.dataset.classId, btn.dataset.studentId);
-                renderClassManage();
-            }
         });
     });
 }
@@ -568,6 +653,14 @@ function bindGlobalEvents() {
             if (page && page !== AdminState.scoresCurrentPage) {
                 AdminState.scoresCurrentPage = page;
                 renderScoreAll();
+            }
+        }
+
+        if (e.target.classList.contains('page-btn') && currentSection === 'classManage') {
+            const page = parseInt(e.target.dataset.page);
+            if (page && page !== AdminState.classesCurrentPage) {
+                AdminState.classesCurrentPage = page;
+                renderClassManage();
             }
         }
 
@@ -795,12 +888,56 @@ async function confirmEditClass() {
 async function confirmAddStudent() {
     const name = document.getElementById('studentName').value.trim();
     const studentId = document.getElementById('studentId').value.trim();
-    if (name && studentId) {
-        await API.admin.addStudent(AdminState.currentAddStudentClassId, name, studentId);
+    const classId = AdminState.currentAddStudentClassId;
+
+    if (!name || !studentId) {
+        Modal.alert('学生姓名和学号不能为空');
+        return;
+    }
+
+    try {
+        await API.admin.addStudent(classId, name, studentId);
         closeModal('addStudentModal');
-        renderClassManage();
-    } else {
-        Modal.alert('学生名称不能为空');
+
+        // 局部刷新：仅更新该班级的学生列表
+        const container = document.getElementById(`student-list-${classId}`);
+        if (container) {
+            // 重新获取学生数据
+            const students = await API.request(`/admin/classes/${classId}/students`);
+            // 更新缓存
+            const classData = AdminState.classes.find(c => c.id == classId);
+            if (classData) {
+                classData.students = students;
+                classData.studentCount = students.length;
+            }
+
+            // 如果当前容器处于展开状态（display != 'none'），则刷新内容
+            if (container.style.display !== 'none') {
+                let studentHtml = '';
+                students.forEach(s => {
+                    studentHtml += `
+                        <div class="student-item" style="display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid #eee;">
+                            <span>${escapeHtml(s.name)} (${escapeHtml(s.studentId)})</span>
+                            <button class="btn-sm btn-danger delete-student-btn" data-class-id="${classId}" data-student-id="${s.id}">删除</button>
+                        </div>
+                    `;
+                });
+                container.innerHTML = studentHtml || '<div class="empty-tip">暂无学生</div>';
+            }
+
+            // 更新班级卡片上显示的学生人数
+            const card = document.querySelector(`.class-card .toggle-student-btn[data-class-id="${classId}"]`)?.closest('.class-card');
+            if (card) {
+                const strongEl = card.querySelector('strong');
+                if (strongEl && strongEl.nextSibling) {
+                    strongEl.nextSibling.textContent = ` (${students.length}人) `;
+                }
+            }
+        }
+
+        Modal.alert('添加成功');
+    } catch (err) {
+        Modal.alert(err.message || '添加失败');
     }
 }
 
