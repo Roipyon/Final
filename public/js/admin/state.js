@@ -17,6 +17,10 @@ export const AdminState = {
     scoresTotal: [],
     allNotices: [],
     systemLogs: [],
+    currentStats: {
+        avg: '0.0', max: 0, min: 0,
+        passCount: 0, totalStu: 0, passRate: '0%'
+    },
     
     // 筛选条件
     currentExamDate: '',

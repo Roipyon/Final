@@ -163,6 +163,25 @@ router.get('/scores',isAdmin,async(req,res)=>{
         const [countRows] = await pool.query(countSQL, params);
         const total = countRows[0].total;
 
+        const statsSQL = `
+            SELECT
+                ROUND(AVG(s.score), 1) AS avg,
+                MAX(s.score) AS max,
+                MIN(s.score) AS min,
+                COUNT(*) AS totalStu,
+                SUM(CASE WHEN s.score >= s.full_mark * 0.6 THEN 1 ELSE 0 END) AS passCount
+            FROM scores s
+            INNER JOIN users u ON s.student_id = u.id
+            INNER JOIN classes c ON s.class_id = c.id
+            INNER JOIN grades g ON g.id = c.grade_id
+            ${whereSQL}
+        `;
+        const [statsRows] = await pool.query(statsSQL, params);
+        const stats = statsRows[0] || {};
+        const passRate = stats.totalStu > 0 
+            ? ((stats.passCount / stats.totalStu) * 100).toFixed(1) + '%' 
+            : '0%';
+
         // 查询分页数据
         const dataSQL = `
             SELECT
@@ -190,7 +209,16 @@ router.get('/scores',isAdmin,async(req,res)=>{
             data: scores,
             total,
             page: parseInt(page),
-            pageSize: limit
+            pageSize: limit,
+            stats: {
+                avg: stats.avg || '0.0',
+                max: stats.max || 0,
+                min: stats.min || 0,
+                passCount: stats.passCount || 0,
+                totalStu: stats.totalStu || 0,
+                passRate
+            },
+            hasExamDate: !!exam_date
         });
     } catch (err) {
         console.error(err);
@@ -217,39 +245,135 @@ router.get('/subjects', isAdmin, async (req, res) => {
 });
 
 // 获取全量总分（跨班级）
-router.get('/totalscores', isAdmin, async(req,res)=>{
-    const examDate = req.query.exam_date;
-    let sql = `
-        SELECT
-            u.id AS studentId,
-            u.real_name AS studentName,
-            u.account AS studentIdNum,
-            CONCAT(g.grade_name, c.class_name) AS className,
-            SUM(s.score) AS total_score,
-            RANK() OVER (ORDER BY SUM(s.score) DESC) AS total_rank,
-            RANK() OVER (PARTITION BY c.id ORDER BY SUM(s.score) DESC) AS class_rank_in_class
-        FROM scores s
-        INNER JOIN users u ON s.student_id = u.id
-        INNER JOIN classes c ON s.class_id = c.id
-        INNER JOIN grades g ON g.id = c.grade_id
-    `;
-    let params = [];
-    if (examDate) {
-        sql += ` WHERE s.exam_date = ?`;
-        params.push(examDate);
+router.get('/totalscores',isAdmin,async(req,res)=>{
+    try {
+        const {
+            exam_date = '',
+            class_name = '所有班级',
+            page = 1,
+            pageSize = 20,
+            sortField = 'totalScore',
+            sortOrder = 'desc'
+        } = req.query;
+
+        const limit = parseInt(pageSize);
+        const offset = (parseInt(page) - 1) * limit;
+
+        // 构建 WHERE 条件
+        const conditions = [];
+        const params = [];
+
+        if (exam_date) {
+            conditions.push('s.exam_date = ?');
+            params.push(exam_date);
+        }
+
+        const whereSQL = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
+
+        // 排序映射
+        const sortMap = {
+            totalScore: 'total_score',
+            studentId: 'u.account',
+            studentName: 'u.real_name',
+            className: 'className',
+            totalGradeRank: 'total_rank',
+            totalClassRank: 'class_rank_in_class'
+        };
+        const orderBy = sortMap[sortField] || 'total_score';
+        const direction = sortOrder === 'asc' ? 'ASC' : 'DESC';
+
+        // 全量统计数据
+        const statsSQL = `
+            SELECT
+                ROUND(AVG(total_score), 1) AS avg,
+                MAX(total_score) AS max,
+                MIN(total_score) AS min,
+                COUNT(*) AS totalStu
+            FROM (
+                SELECT SUM(s.score) AS total_score
+                FROM scores s
+                INNER JOIN users u ON s.student_id = u.id
+                INNER JOIN classes c ON s.class_id = c.id
+                INNER JOIN grades g ON g.id = c.grade_id
+                ${whereSQL}
+                GROUP BY u.id
+            ) AS student_totals
+        `;
+        const [statsRows] = await pool.query(statsSQL, params);
+        const stats = statsRows[0] || {};
+
+        // 总数查询
+        const countSQL = `
+            SELECT COUNT(*) AS total FROM (
+                SELECT u.id
+                FROM scores s
+                INNER JOIN users u ON s.student_id = u.id
+                INNER JOIN classes c ON s.class_id = c.id
+                INNER JOIN grades g ON g.id = c.grade_id
+                ${whereSQL}
+                GROUP BY u.id
+            ) AS student_list
+        `;
+        const [countRows] = await pool.query(countSQL, params);
+        const total = countRows[0].total;
+
+        // 分页数据查询（含班级筛选）
+        let dataSQL = `
+            SELECT
+                u.id AS studentId,
+                u.real_name AS studentName,
+                u.account AS studentIdNum,
+                CONCAT(g.grade_name, c.class_name) AS className,
+                SUM(s.score) AS total_score,
+                RANK() OVER (ORDER BY SUM(s.score) DESC) AS total_rank,
+                RANK() OVER (PARTITION BY c.id ORDER BY SUM(s.score) DESC) AS class_rank_in_class
+            FROM scores s
+            INNER JOIN users u ON s.student_id = u.id
+            INNER JOIN classes c ON s.class_id = c.id
+            INNER JOIN grades g ON g.id = c.grade_id
+            ${whereSQL}
+            GROUP BY u.id, c.id
+        `;
+
+        const havingParams = [...params];
+        if (class_name && class_name !== '所有班级') {
+            dataSQL += ` HAVING className = ?`;
+            havingParams.push(class_name);
+        }
+
+        dataSQL += ` ORDER BY ${orderBy} ${direction} LIMIT ? OFFSET ?`;
+        havingParams.push(limit, offset);
+
+        const [rows] = await pool.query(dataSQL, havingParams);
+
+        const result = rows.map(row => ({
+            id: row.studentId,
+            studentName: row.studentName,
+            studentId: row.studentIdNum,
+            className: row.className,
+            total_score: row.total_score,
+            score: parseFloat(row.total_score) || 0,        // 兼容前端统一字段
+            class_rank: row.total_rank,
+            class_rank_in_class: row.class_rank_in_class
+        }));
+
+        res.json({
+            data: result,
+            total,
+            page: parseInt(page),
+            pageSize: limit,
+            stats: {
+                avg: stats.avg || '0.0',
+                max: stats.max || 0,
+                min: stats.min || 0,
+                totalStu: stats.totalStu || 0
+            },
+            hasExamDate: !!exam_date
+        });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ success: false, message: '查询失败' });
     }
-    sql += ` GROUP BY u.id, u.real_name, u.account, c.id, g.grade_name, c.class_name ORDER BY total_score DESC`;
-    const [rows] = await pool.query(sql, params);
-    const result = rows.map(row => ({
-        id: row.studentId,
-        studentName: row.studentName,
-        studentId: row.studentIdNum,
-        className: row.className,
-        total_score: row.total_score,
-        class_rank: row.total_rank,
-        class_rank_in_class: row.class_rank_in_class
-    }));
-    res.json(result);
 });
 
 // 获取全量通知

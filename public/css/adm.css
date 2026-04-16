@@ -857,3 +857,12 @@ hr {
     z-index: 2;
     white-space: nowrap;
 }
+
+.empty-stats-tip {
+    padding: 20px;
+    text-align: center;
+    color: var(--gray);
+    background: var(--gray-light);
+    border-radius: 12px;
+    margin-bottom: 16px;
+}

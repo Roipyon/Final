@@ -25,7 +25,7 @@ export const AdminRender = {
                     <div class="stat-card"><div class="stat-value">${stats.avg}</div><div>平均分</div></div>
                     <div class="stat-card"><div class="stat-value">${stats.max}</div><div>最高分</div></div>
                     <div class="stat-card"><div class="stat-value">${stats.min}</div><div>最低分</div></div>
-                    <div class="stat-card"><div class="stat-value">${stats.passCount}/${stats.total}</div><div>及格人数</div></div>
+                    <div class="stat-card"><div class="stat-value">${stats.passCount}/${stats.totalStu}</div><div>及格人数</div></div>
                     <div class="stat-card"><div class="stat-value">${stats.passRate}</div><div>及格率</div></div>
                 </div>
             `;

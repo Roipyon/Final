@@ -56,9 +56,9 @@ const API = {
             return API.request(`/admin/scores?${query}`);
         },
         getSubjects: () => API.request(`/admin/subjects`),
-        getTotalScores: (examDate = '') => {
-            const url = examDate ? `/admin/totalscores?exam_date=${examDate}` : '/admin/totalscores';
-            return API.request(url);
+        getTotalScores: (params = {}) => {
+            const query = new URLSearchParams(params).toString();
+            return API.request(`/admin/totalscores?${query}`);
         },
         addClass: (className, gradeId) => API.request('/admin/classes', {
             method: 'POST',

@@ -37,24 +37,45 @@ async function loadBaseData() {
 }
 
 async function loadScoresData() {
-    if (AdminState.globalSubjectFilter === '总分') {
-        const data = await API.admin.getTotalScores(AdminState.currentExamDate);
-        AdminState.scoresTotal = data.map(item => ({ ...item, score: parseFloat(item.total_score) || 0 }));
-        AdminState.scoresTotalCount = data.length;
-    } else {
-        const params = {
-            exam_date: AdminState.currentExamDate,
-            class_name: AdminState.globalClassFilter,
-            subject: AdminState.globalSubjectFilter,
-            page: AdminState.scoresCurrentPage,
-            pageSize: AdminState.scoresPageSize,
-            sortField: AdminState.currentSortField,
-            sortOrder: AdminState.currentSortOrder
+    const isTotal = AdminState.globalSubjectFilter === '总分';
+    
+    const params = {
+        exam_date: AdminState.currentExamDate,
+        class_name: AdminState.globalClassFilter,
+        page: AdminState.scoresCurrentPage,
+        pageSize: AdminState.scoresPageSize,
+        sortField: AdminState.currentSortField,
+        sortOrder: AdminState.currentSortOrder
+    };
+
+    let res;
+    if (isTotal) {
+        res = await API.admin.getTotalScores(params);
+        // 统一数据格式：每个 item 都有 score 字段
+        AdminState.allScores = res.data.map(item => ({ 
+            ...item, 
+            score: parseFloat(item.total_score) || 0 
+        }));
+        AdminState.currentStats = {
+            avg: res.stats.avg,
+            max: res.stats.max,
+            min: res.stats.min,
+            totalStu: res.stats.totalStu,
+            passCount: '-',
+            passRate: '-'
         };
-        const res = await API.admin.getScores(params);
-        AdminState.allScores = res.data.map(s => ({ ...s, score: parseFloat(s.score) || 0 }));
-        AdminState.scoresTotalCount = res.total;
+    } else {
+        params.subject = AdminState.globalSubjectFilter;
+        res = await API.admin.getScores(params);
+        AdminState.allScores = res.data.map(s => ({ 
+            ...s, 
+            score: parseFloat(s.score) || 0 
+        }));
+        AdminState.currentStats = res.stats;
     }
+    
+    AdminState.scoresTotalCount = res.total;
+    AdminState.hasExamDate = res.hasExamDate;
 }
 
 async function renderScoreAll() {
@@ -76,15 +97,18 @@ async function renderScoreAll() {
 
     await loadScoresData();
     
-    let rawData = isTotal ? AdminState.scoresTotal : AdminState.allScores;
-    let displayData = filterScores(rawData, isTotal);
-    const stats = computeStats(displayData);
+    const displayData = filterScores(AdminState.allScores, isTotal);
+    const stats = AdminState.currentStats;
     const hasExamDate = !!AdminState.currentExamDate;
-    displayData = sortScores(displayData, isTotal, hasExamDate);
+    const sortedData = sortScores(displayData, isTotal, hasExamDate);
 
     const totalPages = Math.ceil(AdminState.scoresTotalCount / AdminState.scoresPageSize);
     const paginationHTML = renderSmartPagination(AdminState.scoresCurrentPage, totalPages);
     
+    const statsHTML = AdminState.hasExamDate 
+    ? AdminRender.statsCards(AdminState.currentStats, isTotal)
+    : '<div class="empty-stats-tip">请选择具体考试批次以查看统计数据</div>';
+
     section.innerHTML = `
         <h3>全量成绩管理 (跨班级)</h3>
         <button class="mobile-filter-btn" id="mobileFilterBtn">
@@ -92,9 +116,9 @@ async function renderScoreAll() {
             <i>▼</i>
         </button>
         ${AdminRender.filterBar()}
-        ${AdminRender.statsCards(stats, isTotal)}
+        ${statsHTML}
         <div class="table-wrapper">
-            ${AdminRender.scoreTable(displayData, isTotal, hasExamDate)}
+            ${AdminRender.scoreTable(sortedData, isTotal, hasExamDate)}
         </div>
         ${paginationHTML}
     `;
@@ -138,8 +162,6 @@ async function renderScoreAll() {
 
 // 绑定筛选栏事件（因为重复渲染需要解绑/重绑）
 function bindFilterBarEvents() {
-    AdminState.scoresCurrentPage = 1;
-
     const examSelect = document.getElementById('examSelect');
     const classFilter = document.getElementById('classFilterAll');
     const subjectFilter = document.getElementById('subjectFilterAll');
@@ -578,6 +600,7 @@ function bindGlobalEvents() {
         const target = e.target;
         if (target.id === 'classFilterAll') {
             AdminState.globalClassFilter = target.value;
+            AdminState.scoresCurrentPage = 1;
             renderScoreAll();
         } else if (target.id === 'subjectFilterAll') {
             AdminState.globalSubjectFilter = target.value;
