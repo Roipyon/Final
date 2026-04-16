@@ -103,11 +103,13 @@ router.get('/scores',isAdmin,async(req,res)=>{
             page = 1,
             pageSize = 20,
             sortField = 'className',
-            sortOrder = 'asc'
+            sortOrder = 'asc',
+            all = 'false'
         } = req.query;
 
         const limit = parseInt(pageSize);
         const offset = (parseInt(page) - 1) * limit;
+        const isExport = all === 'true';
 
         // 构建 WHERE 条件
         const conditions = [];
@@ -147,9 +149,13 @@ router.get('/scores',isAdmin,async(req,res)=>{
             INNER JOIN grades g ON g.id = c.grade_id
             ${whereSQL}
         `;
-        const [countRows] = await pool.query(countSQL, params);
-        const total = countRows[0].total;
 
+        let total;
+        if (!isExport) {
+            const [countRows] = await pool.query(countSQL, params);
+            total = countRows[0].total;
+        }
+        
         const statsSQL = `
             SELECT
                 ROUND(AVG(s.score), 1) AS avg,
@@ -170,7 +176,7 @@ router.get('/scores',isAdmin,async(req,res)=>{
             : '0%';
 
         // 查询分页数据
-        const dataSQL = `
+        let dataSQL = `
             SELECT
                 s.id,
                 CONCAT(g.grade_name, c.class_name) AS className,
@@ -187,10 +193,14 @@ router.get('/scores',isAdmin,async(req,res)=>{
             INNER JOIN grades g ON g.id = c.grade_id
             ${whereSQL}
             ORDER BY ${orderBy} ${direction}
-            LIMIT ? OFFSET ?
         `;
         const dataParams = [...params, limit, offset];
+        if (!isExport) {
+            dataSQL += ` LIMIT ? OFFSET ? `;
+            dataParams.push(limit, offset);
+        }
         const [scores] = await pool.query(dataSQL, dataParams);
+        if (isExport) total = scores.length;
 
         res.json({
             data: scores,

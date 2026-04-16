@@ -16,9 +16,8 @@ async function loadBaseData() {
     const classesRes = await API.admin.getClasses({ pageSize: 1000 });
     const allClasses = classesRes.data;   // 全量班级数据
 
-    const [info, classes, teachers, grades, exams, notices, logs, subjects] = await Promise.all([
+    const [info, teachers, grades, exams, notices, logs, subjects] = await Promise.all([
         API.admin.getInfo(),
-        API.admin.getClasses(),
         API.admin.getTeachers(),
         API.admin.getGrades(),
         API.admin.getExams(),
@@ -36,6 +35,7 @@ async function loadBaseData() {
     AdminState.logTotal = logs.total;
     AdminState.allSubjects = subjects;
     AdminState.globalClassFilter = '所有班级';
+    AdminState.noticesTotalCount = notices.total;
     if (!AdminState.allSubjects.includes(AdminState.globalSubjectFilter)) {
         AdminState.globalSubjectFilter = AdminState.allSubjects[0] || '数学';
     }
@@ -199,7 +199,7 @@ async function renderDashboard() {
     // 真实渲染
     const totalClasses = classes.length;
     const totalStudents = classes.reduce((sum, c) => sum + (c.studentCount || 0), 0);
-    const totalNotices = notices.length;
+    const totalNotices = AdminState.noticesTotalCount;
     const latestNotices = [...notices]
         .sort((a, b) => new Date(b.publishTime) - new Date(a.publishTime))
         .slice(0, 3);
@@ -958,10 +958,29 @@ function updateSortButtonText() {
     if (btn) btn.textContent = AdminState.currentSortOrder === 'asc' ? '↑' : '↓';
 }
 
-function exportCSV() {
+async function exportCSV() {
     const isTotal = AdminState.globalSubjectFilter === '总分';
-    const data = isTotal ? AdminState.scoresTotal : AdminState.allScores;
-    const filtered = filterScores(data, isTotal);
+    const params = {
+        exam_date: AdminState.currentExamDate,
+        class_name: AdminState.globalClassFilter,
+        sortField: AdminState.currentSortField,
+        sortOrder: AdminState.currentSortOrder,
+        all: 'true'                 // 请求全量数据
+    };
+    if (!isTotal) {
+        params.subject = AdminState.globalSubjectFilter;
+    }
+
+    let res;
+    if (isTotal) {
+        res = await API.admin.getTotalScores(params);
+    } else {
+        res = await API.admin.getScores(params);
+    }
+
+    const allData = res.data;
+    // 应用搜索关键词过滤
+    const filtered = filterScores(allData, isTotal);
     const hasExamDate = !!AdminState.currentExamDate;
     
     let csv = isTotal 

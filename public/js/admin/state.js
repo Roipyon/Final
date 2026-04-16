@@ -46,6 +46,7 @@ export const AdminState = {
     noticesCurrentPage: 1,
     noticesPageSize: 10,
     noticesTotal: 0,
+    noticesTotalCount: 0,
     
     // 临时编辑ID
     currentEditScoreId: null,
