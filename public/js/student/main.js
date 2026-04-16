@@ -95,14 +95,14 @@ function renderHomeModule() {
             <div class="summary-card"><div class="summary-number">${Number(total.totalAvg).toFixed(1)}</div><div>平均分</div></div>
             <div class="summary-card"><div class="summary-number">${total.totalRank}</div><div>班级排名</div></div>
         </div>
-        <h4>近期成绩亮点</h4>
+        <h4 style="margin-bottom:10px;">近期成绩亮点</h4>
         <table class="table">
             <thead><tr><th>科目</th><th>成绩</th><th>班级均分</th><th>对比</th></tr></thead>
             <tbody>${StudentRender.scoreHighlightTable(StudentState.personalScores)}</tbody>
         </table>
         <div style="text-align:right;"><a href="#" data-nav="score" class="nav-link">查看全部成绩 →</a></div>
         
-        <h4 style="margin-top:24px;">最新班级通知 <span class="badge unread-badge">${unread}条未读</span></h4>
+        <h4 style="margin-top:24px;margin-bottom:12px">最新班级通知 <span class="badge unread-badge">${unread}条未读</span></h4>
         <div id="homeNoticeList"></div>
         <div style="text-align:right;"><a href="#" data-nav="notice" class="nav-link">查看全部通知 →</a></div>
     `;
@@ -229,7 +229,7 @@ function renderNoticeModule() {
     const paginationHTML = renderSmartPagination(StudentState.currentNoticePage, totalPages);
 
     const html = `
-        <div style="display:flex; justify-content:space-between;">
+        <div style="display:flex;justify-content:space-between;margin-bottom:10px">
             <h3>班级通知 <span class="badge unread-badge">${getUnreadCount()}条未读</span></h3>
             <div>
                 <button class="filter-select ${StudentState.noticeFilter === 'all' ? 'active-filter' : ''}" data-filter="all">全部</button>

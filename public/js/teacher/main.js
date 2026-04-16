@@ -55,7 +55,7 @@ async function renderHome() {
         </div>
         <div style="margin-top:24px;">
             <h4>最新通知</h4>
-            <div id="homeNoticeList"></div>
+            <div id="homeNoticeList" style="margin-top: 10px"></div>
             <div style="text-align:right; margin-top:12px;">
                 <a href="#" data-nav="notice" class="nav-link">管理通知 →</a>
             </div>
@@ -245,10 +245,12 @@ async function renderNoticeModule() {
             <div class="form-group"><label>内容</label><textarea id="newContent" rows="4"></textarea></div>
             <button id="publishNoticeBtn" class="btn-primary">发布通知</button>
         </div>
-        <h4 style="margin-top:24px;">已发布通知</h4>
-        <div>
-            <button class="filter-select ${TeacherState.noticeFilter === 'all' ? 'active-filter' : ''}" data-filter="all">全部</button>
-            <button class="filter-select ${TeacherState.noticeFilter === 'unread' ? 'active-filter' : ''}" data-filter="unread">未读</button>
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+            <h4>已发布通知</h4>
+            <div style="margin:10px 0">
+                <button class="filter-select ${TeacherState.noticeFilter === 'all' ? 'active-filter' : ''}" data-filter="all">全部</button>
+                <button class="filter-select ${TeacherState.noticeFilter === 'unread' ? 'active-filter' : ''}" data-filter="unread">未读</button>
+            </div>
         </div>
         <div id="noticeListContainer"></div>
         ${paginationHTML}

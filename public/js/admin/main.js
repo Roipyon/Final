@@ -229,12 +229,12 @@ async function renderDashboard() {
             <div class="stat-card"><div class="stat-value">${totalNotices}</div><div>班级通知</div></div>
         </div>
         <div style="margin-top:24px;">
-            <h4>最新通知</h4>
+            <h4 style="margin-bottom:10px;">最新通知</h4>
             <div>${noticeHtml || '<div class="empty-tip">暂无通知</div>'}</div>
             <div style="text-align:right;"><a href="#" data-nav="noticeAll" class="nav-link">查看全部 →</a></div>
         </div>
-        <div style="margin-top:24px;">
-            <h4>最近操作日志</h4>
+        <div style="margin-top:12px;">
+            <h4 style="margin-bottom:10px;">最近操作日志</h4>
             <div class="table-wrapper">
                 <table class="table"><thead><tr><th>操作人</th><th>类型</th><th>内容</th><th>时间</th></tr></thead><tbody>${logRows}</tbody></table>
             </div>
@@ -306,15 +306,14 @@ async function renderClassManage() {
     
     const html = `
         <h3>班级管理与教师绑定</h3>
-        <div class="card" style="background:#f9f9f9; padding:16px;">
-            <h4>新增班级</h4>
+        <div class="card" style="display:flex;flex-direction:column;justify-content:center;align-items:center;background:#f9f9f9;padding:16px;margin-bottom:12px;">
+            <h4 style="margin:10px 0;">新增班级</h4>
             <button id="openAddClassBtn" class="btn-primary">+ 新增班级</button>
         </div>
         <h4>现有班级列表</h4>
-        <div id="classListContainer">${classListHtml || '<div class="empty-tip">暂无班级</div>'}</div>
+        <div id="classListContainer" style="margin: 10px 0;">${classListHtml || '<div class="empty-tip">暂无班级</div>'}</div>
         ${paginationHTML}
-        <hr>
-        <h4>教师池管理</h4>
+        <h4 style="margin-bottom:10px;">教师池管理</h4>
         <button id="openAddTeacherBtn" class="btn-sm">+ 添加教师</button>
         <div style="margin-top:12px;">${teacherPoolHtml}</div>
     `;
@@ -504,7 +503,7 @@ async function renderNoticeAll() {
     const paginationHTML = renderSmartPagination(AdminState.noticesCurrentPage, totalPages);
 
     const html = `
-        <h3>全校班级通知</h3>
+        <h3 style="margin-bottom:10px;">全校班级通知</h3>
         <div class="filter-bar">${filterHtml}</div>
         <div id="noticeListContainer"></div>
         ${paginationHTML}
@@ -550,7 +549,7 @@ async function renderSystemLog() {
     const paginationHTML = renderSmartPagination(AdminState.currentLogPage, totalPages);
     
     const html = `
-        <h3>系统操作日志</h3>
+        <h3 style="margin-bottom:10px;">系统操作日志</h3>
         <div class="table-wrapper">
             <table class="table"><thead><tr><th>操作人</th><th>类型</th><th>内容</th><th>时间</th></tr></thead><tbody>${rows}</tbody></table>
         </div>

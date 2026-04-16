@@ -508,7 +508,7 @@ button {
 .mobile-filter-btn {
     display: none;
     width: 100%;
-    margin-bottom: 16px;
+    margin: 16px 0;
     padding: 14px 16px;
     background: white;
     border: 1px solid var(--border);
