@@ -224,7 +224,7 @@ router.get('/scores',isAdmin,async(req,res)=>{
 });
 
 // 获取所有科目
-router.get('/subjects', isAdmin, async (req, res) => {
+router.get('/subjects',isAdmin,async(req,res)=>{
     try {
         const [rows] = await pool.query(`
             SELECT DISTINCT subject

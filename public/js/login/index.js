@@ -106,23 +106,31 @@ async function postInfo(ele1,ele2,identity)
     }
 }
 
-loginBtn.addEventListener('click',()=>{
+loginBtn.addEventListener('click',(e)=>{
+    const btn = e.currentTarget;
     if (chosen.id === 'stu')
     {
         const stuAccount = document.querySelector('#stuAccount');
         const stuPassWord = document.querySelector('#stuPassWord');
-        postInfo(stuAccount,stuPassWord,'student');
+        withLock(btn, () => postInfo(stuAccount,stuPassWord,'student'), {
+            loadingText: '登录中...'
+        });
+        
     }
     else if (chosen.id === 'tea')
     {
         const teaAccount = document.querySelector('#teaAccount');
         const teaPassWord = document.querySelector('#teaPassWord');
-        postInfo(teaAccount,teaPassWord,'teacher');
+        withLock(btn, () => postInfo(teaAccount,teaPassWord,'teacher'), {
+            loadingText: '登录中...'
+        });
     }
     else if (chosen.id === 'adm')
     {
         const admAccount = document.querySelector('#admAccount');
         const admPassWord = document.querySelector('#admPassWord');
-        postInfo(admAccount,admPassWord,'admin');
+        withLock(btn, () => postInfo(admAccount,admPassWord,'admin'), {
+            loadingText: '登录中...'
+        });
     }
 });

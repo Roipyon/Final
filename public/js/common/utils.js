@@ -107,3 +107,31 @@ function renderSmartPagination(currentPage, totalPages) {
     html += '</div>';
     return html;
 }
+
+/**
+ * 为异步操作添加按钮锁，防止重复提交
+ * @param {HTMLButtonElement} btn - 触发操作的按钮
+ * @param {Function} asyncFn - 异步函数，返回 Promise
+ * @param {Object} options - 可选配置
+ * @returns {Promise} asyncFn 的返回值
+ */
+function withLock(btn, asyncFn, options = {}) {
+    const { loadingText = '处理中...', successText = null } = options;
+    if (btn.disabled) return Promise.reject(new Error('操作进行中，请稍候'));
+
+    const originalText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = loadingText;
+
+    return asyncFn()
+        .then(result => {
+            btn.disabled = false;
+            btn.textContent = successText || originalText;
+            return result;
+        })
+        .catch(err => {
+            btn.disabled = false;
+            btn.textContent = originalText;
+            throw err;
+        });
+}

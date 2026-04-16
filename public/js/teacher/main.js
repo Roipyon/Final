@@ -261,15 +261,23 @@ async function renderNoticeModule() {
         card.mount(container);
     });
 
-    document.getElementById('publishNoticeBtn').addEventListener('click', async () => {
-        const title = document.getElementById('newTitle').value.trim();
-        const content = document.getElementById('newContent').value.trim();
-        if (!title || !content) return Modal.alert('请填写完整');
-        await API.teacher.publishNotice(title, content);
-        TeacherState.notices = await API.teacher.getNotices();
-        document.getElementById('newTitle').value = '';
-        document.getElementById('newContent').value = '';
-        renderNoticeModule();
+    document.getElementById('publishNoticeBtn').addEventListener('click', async(e) => {
+        const btn = e.currentTarget;
+        try {
+            await withLock(btn, async()=>{
+                const title = document.getElementById('newTitle').value.trim();
+                const content = document.getElementById('newContent').value.trim();
+                if (!title || !content) return Modal.alert('请填写完整');
+                await API.teacher.publishNotice(title, content);
+                TeacherState.notices = await API.teacher.getNotices();
+                document.getElementById('newTitle').value = '';
+                document.getElementById('newContent').value = '';
+                renderNoticeModule();
+            }, { loadingText: '发布中...' });
+            Modal.alert('发布成功');
+        } catch (err) {
+            Modal.alert(err.message || '操作失败');
+        }
     });
     
 }
@@ -404,14 +412,21 @@ function bindGlobalEvents() {
     document.getElementById('editModalConfirmBtn')?.addEventListener('click', confirmEditScore);
     
     // 编辑通知确认
-    document.getElementById('editNoticeConfirmBtn')?.addEventListener('click', async () => {
-        const title = document.getElementById('editNoticeTitle').value.trim();
-        const content = document.getElementById('editNoticeContent').value.trim();
-        if (!title || !content) return;
-        await API.teacher.updateNotice(TeacherState.currentEditingNoticeId, title, content);
-        TeacherState.notices = await API.teacher.getNotices();
-        closeModal('editNoticeModal');
-        renderNoticeModule();
+    document.getElementById('editNoticeConfirmBtn')?.addEventListener('click', async(e)=>{
+        const btn = e.currentTarget;
+        try {
+            await withLock(btn, async()=>{
+                const title = document.getElementById('editNoticeTitle').value.trim();
+                const content = document.getElementById('editNoticeContent').value.trim();
+                if (!title || !content) return;
+                await API.teacher.updateNotice(TeacherState.currentEditingNoticeId, title, content);
+                TeacherState.notices = await API.teacher.getNotices();
+                closeModal('editNoticeModal');
+                renderNoticeModule();
+            }, { loadingText: '保存中...' });
+        } catch (err) {
+            Modal.alert(err.message);
+        }
     });
     
     // 关闭按钮
@@ -423,54 +438,62 @@ function bindGlobalEvents() {
 }
 
 async function confirmEditScore() {
-    // 编辑成绩确认
-    const newScore = parseFloat(Number(document.getElementById('editScore').value).toFixed(1));
-    if (isNaN(newScore)) {
-        Modal.alert('请输入有效的数字');
-        return;
-    }
-    const subject = document.getElementById('editSubject').value;
-    const scoreId = TeacherState.currentEditId;
-    // 总分拦截
-    if (subject === '总分') {
-        Modal.alert("总分由各科成绩自动计算，不可直接编辑");
-        closeModal('editScoreModal');
-        return;
-    }
-    // 查找成绩记录
-    const scoreItem = TeacherState.scoresData.find(s => 
-        s.scoreId == scoreId && s.subject === subject
-    );
-    if (!scoreItem) {
-        Modal.alert('成绩记录不存在');
-        closeModal('editScoreModal');
-        return;
-    }
-    // 获取满分并校验
+    const btn = document.getElementById('editModalConfirmBtn');
+    if (!btn) return;
     try {
-        const fullRes = await API.teacher.getFullMark(subject);
-        const fullMark = Number(fullRes.full_mark) || 100;
-        if (newScore < 0 || newScore > fullMark) {
-            Modal.alert(`请输入有效的成绩 (0-${fullMark})`);
-            return;
-        }
-    } catch (e) {
-        // 如果满分接口失败，询问用户是否继续
-        const confirmed = await Modal.confirm('无法获取科目满分，是否仍要提交？')
-        if (!confirmed) {
-            return;
-        }
-    }
+        await withLock(btn, async()=>{
+            // 编辑成绩确认
+            const newScore = parseFloat(Number(document.getElementById('editScore').value).toFixed(1));
+            if (isNaN(newScore)) {
+                Modal.alert('请输入有效的数字');
+                return;
+            }
+            const subject = document.getElementById('editSubject').value;
+            const scoreId = TeacherState.currentEditId;
+            // 总分拦截
+            if (subject === '总分') {
+                Modal.alert("总分由各科成绩自动计算，不可直接编辑");
+                closeModal('editScoreModal');
+                return;
+            }
+            // 查找成绩记录
+            const scoreItem = TeacherState.scoresData.find(s => 
+                s.scoreId == scoreId && s.subject === subject
+            );
+            if (!scoreItem) {
+                Modal.alert('成绩记录不存在');
+                closeModal('editScoreModal');
+                return;
+            }
+            // 获取满分并校验
+            try {
+                const fullRes = await API.teacher.getFullMark(subject);
+                const fullMark = Number(fullRes.full_mark) || 100;
+                if (newScore < 0 || newScore > fullMark) {
+                    Modal.alert(`请输入有效的成绩 (0-${fullMark})`);
+                    return;
+                }
+            } catch (e) {
+                // 如果满分接口失败，询问用户是否继续
+                const confirmed = await Modal.confirm('无法获取科目满分，是否仍要提交？')
+                if (!confirmed) {
+                    return;
+                }
+            }
 
-    // 提交更新
-    try {
-        const result = await API.teacher.updateScore(scoreId,newScore);
-            Modal.alert('成绩修改成功');
-            closeModal('editScoreModal');
-            await renderScoreModule();
-            await renderHome();      // 同步更新首页统计
+            // 提交更新
+            try {
+                const result = await API.teacher.updateScore(scoreId,newScore);
+                    Modal.alert('成绩修改成功');
+                    closeModal('editScoreModal');
+                    await renderScoreModule();
+                    await renderHome();      // 同步更新首页统计
+            } catch (err) {
+                // api端处理
+            }
+        }, { loadingText: '保存中...' });
     } catch (err) {
-        // api端处理
+        Modal.alert(err.message);
     }
 }
 

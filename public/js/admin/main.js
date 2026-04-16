@@ -558,10 +558,14 @@ async function renderSystemLog() {
     `;
     document.getElementById('systemLogSection').innerHTML = html;
     
+    const debouncedRenderLog = debounce(()=>{
+        renderSystemLog();
+    }, 200)
+
     document.querySelectorAll('#systemLogSection .page-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             AdminState.currentLogPage = parseInt(btn.dataset.page);
-            renderSystemLog();
+            debouncedRenderLog();
         });
     });
 }
@@ -640,11 +644,18 @@ function bindGlobalEvents() {
             }
         }
 
+        const debouncedRenderNotice = debounce(()=>{
+            renderNoticeAll();
+        }, 200);
+        const debouncedRenderScore = debounce(()=>{
+            renderScoreAll();
+        }, 200);
+
         if (e.target.classList.contains('page-btn') && currentSection === 'noticeAll') {
             const page = parseInt(e.target.dataset.page);
             if (page && page !== AdminState.noticesCurrentPage) {
                 AdminState.noticesCurrentPage = page;
-                renderNoticeAll();
+                debouncedRenderNotice();
             }
         }
 
@@ -652,7 +663,7 @@ function bindGlobalEvents() {
             const page = parseInt(e.target.dataset.page);
             if (page && page !== AdminState.scoresCurrentPage) {
                 AdminState.scoresCurrentPage = page;
-                renderScoreAll();
+                debouncedRenderScore();
             }
         }
 
@@ -670,11 +681,15 @@ function bindGlobalEvents() {
         }
     });
 
+    const debounceSearch = debounce(()=>{
+        if (currentSection === 'scoreAll') renderScoreAll();
+    }, 500);
+
     // 搜索框回车
     document.addEventListener('keypress', (e) => {
         if (e.target.id === 'searchInput' && e.key === 'Enter') {
             AdminState.currentSearchKeyword = e.target.value;
-            if (currentSection === 'scoreAll') renderScoreAll();
+            debounceSearch();
         }
     });
 
@@ -770,186 +785,229 @@ async function openAddScoreModal() {
 }
 
 async function confirmAddScore() {
-    const className = document.getElementById('addScoreClass').value;
-    const studentName = document.getElementById('addScoreStudentName').value.trim();
-    const studentId = document.getElementById('addScoreStudentId').value.trim();
-    let subject = document.getElementById('addScoreSubject').value.trim();
-    const score = parseFloat(document.getElementById('addScoreValue').value);
-    const examDate = document.getElementById('addScoreExamDate').value;
-
-    if (!className || !studentName || !studentId || !subject) {
-        Modal.alert('请完整填写');
-        return;
-    }
-    if (subject === '总分') {
-        Modal.alert('总分由系统自动计算，不可手动添加');
-        return;
-    }
-    // 满分校验
+    const btn = document.getElementById('confirmAddScoreBtn');
+    if (!btn) return;
     try {
-        const fullRes = await API.request('/admin/fullmark', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ subject })
-        });
-        const fullMark = fullRes.full_mark || 100;
-        if (isNaN(score) || score < 0 || score > fullMark) {
-            Modal.alert(`成绩必须在 0-${fullMark} 之间`);
-            return;
-        }
-        await API.admin.addScore({ className, studentName, studentId, subject, score, examDate });
-        closeModal('addScoreModal');
-        renderScoreAll();
-        if (currentSection === 'dashboard') renderDashboard();
-    } catch (e) { 
-        console.error('添加成绩失败:', err);
+        await withLock(btn, async()=>{
+            const className = document.getElementById('addScoreClass').value;
+            const studentName = document.getElementById('addScoreStudentName').value.trim();
+            const studentId = document.getElementById('addScoreStudentId').value.trim();
+            let subject = document.getElementById('addScoreSubject').value.trim();
+            const score = parseFloat(document.getElementById('addScoreValue').value);
+            const examDate = document.getElementById('addScoreExamDate').value;
+
+            if (!className || !studentName || !studentId || !subject) {
+                Modal.alert('请完整填写');
+                return;
+            }
+            if (subject === '总分') {
+                Modal.alert('总分由系统自动计算，不可手动添加');
+                return;
+            }
+            // 满分校验
+            const fullRes = await API.request('/admin/fullmark', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ subject })
+            });
+            const fullMark = fullRes.full_mark || 100;
+            if (isNaN(score) || score < 0 || score > fullMark) {
+                Modal.alert(`成绩必须在 0-${fullMark} 之间`);
+                return;
+            }
+            await API.admin.addScore({ className, studentName, studentId, subject, score, examDate });
+            closeModal('addScoreModal');
+            renderScoreAll();
+            if (currentSection === 'dashboard') renderDashboard();
+        }, { loadingText: '添加中...'});
+    } catch (err) {
+        Modal.alert(err.message);
     }
 }
 
 async function confirmEditScore() {
-    const newScore = parseFloat(Number(document.getElementById('editScoreValue').value).toFixed(1));
-    const id = AdminState.currentEditScoreId;
-    
-    const scoreItem = AdminState.allScores.find(s => s.id === id);
-    if (!scoreItem) {
-        Modal.alert("成绩记录不存在");
-        return;
-    }
-    
-    if (scoreItem.subject === '总分') {
-        Modal.alert("总分由系统自动计算，不可手动修改");
-        closeModal('editScoreAdminModal');
-        return;
-    }
-    
+    const btn = document.getElementById('confirmEditScoreAdminBtn');
+    if (!btn) return;
     try {
-        const fullRes = await API.request('/admin/fullmark', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ subject: scoreItem.subject })
-        });
-        const fullMark = fullRes.full_mark || 100;
-        if (isNaN(newScore) || newScore < 0 || newScore > fullMark) {
-            Modal.alert(`请输入有效的成绩 (0-${fullMark})`);
-            return;
-        }
-    } catch (e) {
-        // 降级：如果满分接口失败，仍允许提交（但可加一个弱校验）
-        console.warn('获取满分失败，跳过范围校验');
-    }
-    
-    const result = await API.admin.updateScore(id, newScore);
-    if (result.success) {
-        Modal.alert("成绩已更新");
-        closeModal('editScoreAdminModal');
-        
-        const freshScores = await API.admin.getScores(AdminState.currentExamDate);
-        AdminState.allScores = freshScores.map(s => ({ ...s, score: parseFloat(s.score) || 0 }));
-        
-        const subjectSet = new Set();
-        AdminState.allScores.forEach(s => subjectSet.add(s.subject));
-        subjectSet.add('总分');
-        AdminState.allSubjects = Array.from(subjectSet).sort();
-        
-        await renderScoreAll();
-        
-        if (currentSection === 'dashboard') {
-            renderDashboard();
-        }
-    } else {
-        Modal.alert(result.message || "修改失败");
+        await withLock(btn, async()=>{
+            const newScore = parseFloat(Number(document.getElementById('editScoreValue').value).toFixed(1));
+            const id = AdminState.currentEditScoreId;
+            
+            const scoreItem = AdminState.allScores.find(s => s.id === id);
+            if (!scoreItem) {
+                Modal.alert("成绩记录不存在");
+                return;
+            }
+            
+            if (scoreItem.subject === '总分') {
+                Modal.alert("总分由系统自动计算，不可手动修改");
+                closeModal('editScoreAdminModal');
+                return;
+            }
+            
+            try {
+                const fullRes = await API.request('/admin/fullmark', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ subject: scoreItem.subject })
+                });
+                const fullMark = fullRes.full_mark || 100;
+                if (isNaN(newScore) || newScore < 0 || newScore > fullMark) {
+                    Modal.alert(`请输入有效的成绩 (0-${fullMark})`);
+                    return;
+                }
+            } catch (e) {
+                // 降级：如果满分接口失败，仍允许提交
+                console.warn('获取满分失败，跳过范围校验');
+            }
+            
+            const result = await API.admin.updateScore(id, newScore);
+            if (result.success) {
+                Modal.alert("成绩已更新");
+                closeModal('editScoreAdminModal');
+                
+                const freshScores = await API.admin.getScores(AdminState.currentExamDate);
+                AdminState.allScores = freshScores.data.map(s => ({ ...s, score: parseFloat(s.score) || 0 }));
+                
+                const subjectSet = new Set();
+                AdminState.allScores.forEach(s => subjectSet.add(s.subject));
+                subjectSet.add('总分');
+                AdminState.allSubjects = Array.from(subjectSet).sort();
+                
+                await renderScoreAll();
+                
+                if (currentSection === 'dashboard') {
+                    renderDashboard();
+                }
+            } else {
+                Modal.alert(result.message || "修改失败");
+                return;
+            }
+        }, { loadingText: '修改中...' });
+    } catch (err) {
+        Modal.alert(err.message);
     }
 }
 
 async function confirmAddClass() {
-    const name = document.getElementById('addClassName').value.trim();
-    const gradeId = document.getElementById('addClassGradeId').value;
-    if (name) {
-        await API.admin.addClass(name, gradeId);
-        closeModal('addClassModal');
-        renderClassManage();
-    } else {
-        Modal.alert('班级名称不能为空');
+    const btn = document.getElementById('confirmAddClassBtn');
+    if (!btn) return;
+    try {
+        await withLock(btn, async()=>{
+            const name = document.getElementById('addClassName').value.trim();
+            const gradeId = document.getElementById('addClassGradeId').value;
+            if (name) {
+                await API.admin.addClass(name, gradeId);
+                closeModal('addClassModal');
+                renderClassManage();
+            } else {
+                Modal.alert('班级名称不能为空');
+                return;
+            }
+        }, { loadingText: '添加中...' }); 
+    } catch (err) {
+        Modal.alert(err.message);
     }
 }
 
 async function confirmEditClass() {
-    const name = document.getElementById('editClassName').value.trim();
-    const gradeId = document.getElementById('editClassGradeId').value;
-    if (name) {
-        await API.admin.updateClass(AdminState.currentEditClassId, name, gradeId);
-        closeModal('editClassModal');
-        renderClassManage();
-    } else {
-        Modal.alert('班级名称不能为空');
+    const btn = document.getElementById('confirmEditClassBtn');
+    if (!btn) return;
+    try {
+        await withLock(btn, async()=>{
+            const name = document.getElementById('editClassName').value.trim();
+            const gradeId = document.getElementById('editClassGradeId').value;
+            if (name) {
+                await API.admin.updateClass(AdminState.currentEditClassId, name, gradeId);
+                closeModal('editClassModal');
+                renderClassManage();
+            } else {
+                Modal.alert('班级名称不能为空');
+                return;
+            }
+        }, { loadingText: '修改中...' });
+    } catch (err) {
+        Modal.alert(err.message);
     }
 }
 
 async function confirmAddStudent() {
-    const name = document.getElementById('studentName').value.trim();
-    const studentId = document.getElementById('studentId').value.trim();
-    const classId = AdminState.currentAddStudentClassId;
-
-    if (!name || !studentId) {
-        Modal.alert('学生姓名和学号不能为空');
-        return;
-    }
-
+    const btn = document.getElementById('confirmAddStudentBtn');
+    if (!btn) return;
     try {
-        await API.admin.addStudent(classId, name, studentId);
-        closeModal('addStudentModal');
+        await withLock(btn, async()=>{
+            const name = document.getElementById('studentName').value.trim();
+            const studentId = document.getElementById('studentId').value.trim();
+            const classId = AdminState.currentAddStudentClassId;
 
-        // 局部刷新：仅更新该班级的学生列表
-        const container = document.getElementById(`student-list-${classId}`);
-        if (container) {
-            // 重新获取学生数据
-            const students = await API.request(`/admin/classes/${classId}/students`);
-            // 更新缓存
-            const classData = AdminState.classes.find(c => c.id == classId);
-            if (classData) {
-                classData.students = students;
-                classData.studentCount = students.length;
+            if (!name || !studentId) {
+                Modal.alert('学生姓名和学号不能为空');
+                return;
             }
 
-            // 如果当前容器处于展开状态（display != 'none'），则刷新内容
-            if (container.style.display !== 'none') {
-                let studentHtml = '';
-                students.forEach(s => {
-                    studentHtml += `
-                        <div class="student-item" style="display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid #eee;">
-                            <span>${escapeHtml(s.name)} (${escapeHtml(s.studentId)})</span>
-                            <button class="btn-sm btn-danger delete-student-btn" data-class-id="${classId}" data-student-id="${s.id}">删除</button>
-                        </div>
-                    `;
-                });
-                container.innerHTML = studentHtml || '<div class="empty-tip">暂无学生</div>';
-            }
+            await API.admin.addStudent(classId, name, studentId);
+            closeModal('addStudentModal');
 
-            // 更新班级卡片上显示的学生人数
-            const card = document.querySelector(`.class-card .toggle-student-btn[data-class-id="${classId}"]`)?.closest('.class-card');
-            if (card) {
-                const strongEl = card.querySelector('strong');
-                if (strongEl && strongEl.nextSibling) {
-                    strongEl.nextSibling.textContent = ` (${students.length}人) `;
+            // 局部刷新：仅更新该班级的学生列表
+            const container = document.getElementById(`student-list-${classId}`);
+            if (container) {
+                // 重新获取学生数据
+                const students = await API.request(`/admin/classes/${classId}/students`);
+                // 更新缓存
+                const classData = AdminState.classes.find(c => c.id == classId);
+                if (classData) {
+                    classData.students = students;
+                    classData.studentCount = students.length;
+                }
+
+                // 如果当前容器处于展开状态（display != 'none'），则刷新内容
+                if (container.style.display !== 'none') {
+                    let studentHtml = '';
+                    students.forEach(s => {
+                        studentHtml += `
+                            <div class="student-item" style="display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid #eee;">
+                                <span>${escapeHtml(s.name)} (${escapeHtml(s.studentId)})</span>
+                                <button class="btn-sm btn-danger delete-student-btn" data-class-id="${classId}" data-student-id="${s.id}">删除</button>
+                            </div>
+                        `;
+                    });
+                    container.innerHTML = studentHtml || '<div class="empty-tip">暂无学生</div>';
+                }
+
+                // 更新班级卡片上显示的学生人数
+                const card = document.querySelector(`.class-card .toggle-student-btn[data-class-id="${classId}"]`)?.closest('.class-card');
+                if (card) {
+                    const strongEl = card.querySelector('strong');
+                    if (strongEl && strongEl.nextSibling) {
+                        strongEl.nextSibling.textContent = ` (${students.length}人) `;
+                    }
                 }
             }
-        }
-
-        Modal.alert('添加成功');
+            Modal.alert('添加成功');
+        }, { loadingText: '添加中...' });
     } catch (err) {
-        Modal.alert(err.message || '添加失败');
+        Modal.alert(err.message);
     }
 }
 
 async function confirmAddTeacher() {
-    const name = document.getElementById('teacherName').value.trim();
-    if (name) {
-        await API.admin.addTeacher(name);
-        AdminState.allTeachers = await API.admin.getTeachers();
-        closeModal('addTeacherModal');
-        renderClassManage();
-    } else {
-        Modal.alert('教师名称不能为空');
+    const btn = document.getElementById('confirmAddTeacherBtn');
+    if (!btn) return;
+    try {
+        await withLock(btn, async()=>{
+            const name = document.getElementById('teacherName').value.trim();
+            if (name) {
+                await API.admin.addTeacher(name);
+                AdminState.allTeachers = await API.admin.getTeachers();
+                closeModal('addTeacherModal');
+                renderClassManage();
+            } else {
+                Modal.alert('教师名称不能为空');
+                return;
+            }
+        }, { loadingText: '添加中...' });
+    } catch (err) {
+        Modal.alert(err.message);
     }
 }
 
