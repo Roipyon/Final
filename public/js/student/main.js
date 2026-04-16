@@ -88,7 +88,7 @@ function renderHomeModule() {
     const total = StudentState.personalTotal;
     
     const html = `
-        <h3>学习概览</h3>
+        <h3 style="margin-bottom:10px;">学习概览</h3>
         <p>${escapeHtml(StudentState.currentStudent?.name)}同学，欢迎回来！</p>
         <div class="summary-flex" style="display:flex; gap:16px; margin:20px 0;">
             <div class="summary-card"><div class="summary-number">${total.total}</div><div>总分</div></div>

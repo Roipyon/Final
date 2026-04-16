@@ -220,7 +220,7 @@ async function renderDashboard() {
     `).join('');
     
     section.innerHTML = `
-        <h3>教务总览看板</h3>
+        <h3 style="margin-bottom:10px;">教务总览看板</h3>
         <p>欢迎 ${escapeHtml(AdminState.currentAdmin?.name || '')}，全校教学数据实时监控。</p>
         <div class="stats-grid">
             <div class="stat-card"><div class="stat-value">${totalClasses}</div><div>班级总数</div></div>
@@ -818,7 +818,7 @@ async function confirmAddScore() {
             closeModal('addScoreModal');
             renderScoreAll();
             if (currentSection === 'dashboard') renderDashboard();
-        }, { loadingText: '添加中...'});
+        }, { loadingText: '添加中...', successText: '添加成功' });
     } catch (err) {
         Modal.alert(err.message);
     }
@@ -882,7 +882,7 @@ async function confirmEditScore() {
                 Modal.alert(result.message || "修改失败");
                 return;
             }
-        }, { loadingText: '修改中...' });
+        }, { loadingText: '修改中...', successText: '修改成功' });
     } catch (err) {
         Modal.alert(err.message);
     }
@@ -903,7 +903,7 @@ async function confirmAddClass() {
                 Modal.alert('班级名称不能为空');
                 return;
             }
-        }, { loadingText: '添加中...' }); 
+        }, { loadingText: '添加中...', successText: '添加成功' }); 
     } catch (err) {
         Modal.alert(err.message);
     }
@@ -924,7 +924,7 @@ async function confirmEditClass() {
                 Modal.alert('班级名称不能为空');
                 return;
             }
-        }, { loadingText: '修改中...' });
+        }, { loadingText: '修改中...', successText: '修改成功' });
     } catch (err) {
         Modal.alert(err.message);
     }
@@ -983,7 +983,7 @@ async function confirmAddStudent() {
                 }
             }
             Modal.alert('添加成功');
-        }, { loadingText: '添加中...' });
+        }, { loadingText: '添加中...', successText: '添加成功' });
     } catch (err) {
         Modal.alert(err.message);
     }
@@ -1004,7 +1004,7 @@ async function confirmAddTeacher() {
                 Modal.alert('教师名称不能为空');
                 return;
             }
-        }, { loadingText: '添加中...' });
+        }, { loadingText: '添加中...', successText: '添加成功' });
     } catch (err) {
         Modal.alert(err.message);
     }

@@ -5,7 +5,6 @@ import { NoticeCard } from '../common/components/NoticeCard.js';
 import { openFilterDrawer, createFilterDrawer } from '../common/filterDrawer.js';
 import { WSClient } from '../common/websocket.js';
 import { Modal } from '../common/components/Modal.js';
-import { AdminState } from '../admin/state.js';
 
 let currentSection = 'home';
 
@@ -45,7 +44,7 @@ async function renderHome() {
     
     // 构建真实内容
     const html = `
-        <h3>班级工作台 · ${escapeHtml(TeacherState.className || '未绑定班级')}</h3>
+        <h3 style="margin-bottom:10px;">班级工作台 · ${escapeHtml(TeacherState.className || '未绑定班级')}</h3>
         <p>欢迎 ${escapeHtml(TeacherState.currentTeacher?.name || '')} 老师，助您更高效地管理本班。</p>
         <div class="stats-grid">
             <div class="stat-card"><div class="stat-value">${TeacherState.general.max}</div><div>最高分</div></div>
@@ -322,7 +321,7 @@ async function renderNoticeModule() {
                 document.getElementById('newTitle').value = '';
                 document.getElementById('newContent').value = '';
                 renderNoticeModule();
-            }, { loadingText: '发布中...' });
+            }, { loadingText: '发布中...', successText: '发布成功' });
             Modal.alert('发布成功');
         } catch (err) {
             Modal.alert(err.message || '操作失败');
@@ -472,7 +471,7 @@ function bindGlobalEvents() {
                 TeacherState.notices = await API.teacher.getNotices();
                 closeModal('editNoticeModal');
                 renderNoticeModule();
-            }, { loadingText: '保存中...' });
+            }, { loadingText: '保存中...', successText: '保存成功' });
         } catch (err) {
             Modal.alert(err.message);
         }
@@ -540,7 +539,7 @@ async function confirmEditScore() {
             } catch (err) {
                 // api端处理
             }
-        }, { loadingText: '保存中...' });
+        }, { loadingText: '保存中...', successText: '保存成功' });
     } catch (err) {
         Modal.alert(err.message);
     }

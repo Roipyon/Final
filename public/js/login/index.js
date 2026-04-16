@@ -113,7 +113,8 @@ loginBtn.addEventListener('click',(e)=>{
         const stuAccount = document.querySelector('#stuAccount');
         const stuPassWord = document.querySelector('#stuPassWord');
         withLock(btn, () => postInfo(stuAccount,stuPassWord,'student'), {
-            loadingText: '登录中...'
+            loadingText: '登录中...',
+            successText: '登录成功，正在跳转...'
         });
         
     }
@@ -122,7 +123,8 @@ loginBtn.addEventListener('click',(e)=>{
         const teaAccount = document.querySelector('#teaAccount');
         const teaPassWord = document.querySelector('#teaPassWord');
         withLock(btn, () => postInfo(teaAccount,teaPassWord,'teacher'), {
-            loadingText: '登录中...'
+            loadingText: '登录中...',
+            successText: '登录成功，正在跳转...'
         });
     }
     else if (chosen.id === 'adm')
@@ -130,7 +132,8 @@ loginBtn.addEventListener('click',(e)=>{
         const admAccount = document.querySelector('#admAccount');
         const admPassWord = document.querySelector('#admPassWord');
         withLock(btn, () => postInfo(admAccount,admPassWord,'admin'), {
-            loadingText: '登录中...'
+            loadingText: '登录中...',
+            successText: '登录成功，正在跳转...'
         });
     }
 });
