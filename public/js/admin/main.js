@@ -26,7 +26,7 @@ async function loadBaseData() {
         API.admin.getSubjects(),
     ]);
     AdminState.currentAdmin = info;
-    AdminState.classes = allClasses;
+    AdminState.allClasses = allClasses;
     AdminState.allTeachers = teachers;
     AdminState.gradeList = grades;
     AdminState.examList = exams;
@@ -39,6 +39,32 @@ async function loadBaseData() {
     if (!AdminState.allSubjects.includes(AdminState.globalSubjectFilter)) {
         AdminState.globalSubjectFilter = AdminState.allSubjects[0] || '数学';
     }
+}
+
+// 通用成绩数据处理
+function processScoreRes(res, isTotal) {
+    let allScores, currentStats;
+    if (isTotal) {
+        allScores = res.data.map(item => ({ 
+            ...item, 
+            score: parseFloat(item.total_score) || 0 
+        }));
+        currentStats = {
+            avg: res.stats.avg,
+            max: res.stats.max,
+            min: res.stats.min,
+            totalStu: res.stats.totalStu,
+            passCount: '-',
+            passRate: '-'
+        };
+    } else {
+        allScores = res.data.map(s => ({ 
+            ...s, 
+            score: parseFloat(s.score) || 0 
+        }));
+        currentStats = res.stats;
+    }
+    return { allScores, currentStats };
 }
 
 async function loadScoresData() {
@@ -56,28 +82,14 @@ async function loadScoresData() {
     let res;
     if (isTotal) {
         res = await API.admin.getTotalScores(params);
-        // 统一数据格式：每个 item 都有 score 字段
-        AdminState.allScores = res.data.map(item => ({ 
-            ...item, 
-            score: parseFloat(item.total_score) || 0 
-        }));
-        AdminState.currentStats = {
-            avg: res.stats.avg,
-            max: res.stats.max,
-            min: res.stats.min,
-            totalStu: res.stats.totalStu,
-            passCount: '-',
-            passRate: '-'
-        };
     } else {
         params.subject = AdminState.globalSubjectFilter;
         res = await API.admin.getScores(params);
-        AdminState.allScores = res.data.map(s => ({ 
-            ...s, 
-            score: parseFloat(s.score) || 0 
-        }));
-        AdminState.currentStats = res.stats;
     }
+    
+    const { allScores, currentStats } = processScoreRes(res, isTotal);
+    AdminState.allScores = allScores;
+    AdminState.currentStats = currentStats;
     
     AdminState.scoresTotalCount = res.total;
     AdminState.hasExamDate = res.hasExamDate;
@@ -182,19 +194,11 @@ function bindFilterBarEvents() {
 // 总览看板 
 async function renderDashboard() {
     const section = document.getElementById('dashboardSection');
-    
-    // 骨架屏
     section.innerHTML = AdminRender.dashboardSkeleton();
     
-    const noticeData = await API.admin.getNotices({ page: 1, pageSize: 3 }); // 最新3条
-    const notices = noticeData.data;
-    const logsData = await API.admin.getLogs(1, 3);
-    const logs = logsData.logs;
-
-    AdminState.allNotices = notices;
-    AdminState.systemLogs = logs;
-
-    const classes = AdminState.classes;
+    const notices = AdminState.allNotices || []; // loadBaseData已请求page1,10
+    const logs = AdminState.systemLogs || [];   // loadBaseData已请求page1, logsPerPage
+    const classes = AdminState.allClasses || [];
     
     // 真实渲染
     const totalClasses = classes.length;
@@ -1234,7 +1238,8 @@ async function init() {
     const wsClient = new WSClient(AdminState.currentAdmin.id);
     wsClient.on('NEW_NOTICE', async () => {
         // 刷新全量通知数据
-        AdminState.allNotices = await API.admin.getNotices();
+        const res = await API.admin.getNotices();
+        AdminState.allNotices = res.data;
         if (currentSection === 'noticeAll') renderNoticeAll();
         else if (currentSection === 'dashboard') renderDashboard();
     });

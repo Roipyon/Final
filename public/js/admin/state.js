@@ -11,6 +11,7 @@ export const AdminState = {
     gradeList: [],
     examList: [],
     allSubjects: [],
+    allClasses: [],
     
     // 成绩数据
     allScores: [],
@@ -55,7 +56,7 @@ export const AdminState = {
 
     // 班级分页
     classesCurrentPage: 1,
-    classesPageSize: 10,
+    classesPageSize: 5,
     classesTotal: 0,
 };
 

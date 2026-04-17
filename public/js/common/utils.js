@@ -116,22 +116,42 @@ function renderSmartPagination(currentPage, totalPages) {
  * @returns {Promise} asyncFn 的返回值
  */
 function withLock(btn, asyncFn, options = {}) {
-    const { loadingText = '处理中...', successText = null } = options;
-    if (btn.disabled) return Promise.reject(new Error('操作进行中，请稍候'));
+    const { loadingText = '处理中...', successText = null, successDuration = 1500 } = options;
+    if (btn.disabled) return Promise.reject(Modal.alert('操作进行中，请稍候'));
 
     const originalText = btn.textContent;
     btn.disabled = true;
     btn.textContent = loadingText;
 
+    // 清除之前可能残留的恢复定时器
+    if (btn._restoreTimer) {
+        clearTimeout(btn._restoreTimer);
+        btn._restoreTimer = null;
+    }
+
     return asyncFn()
         .then(result => {
             btn.disabled = false;
-            btn.textContent = successText || originalText;
+            if (successText) {
+                btn.textContent = successText;
+                if (successDuration > 0) {
+                    btn._restoreTimer = setTimeout(() => {
+                        btn.textContent = originalText;
+                        btn._restoreTimer = null;
+                    }, successDuration);
+                }
+            } else {
+                btn.textContent = originalText;
+            }
             return result;
         })
         .catch(err => {
             btn.disabled = false;
             btn.textContent = originalText;
+            if (btn._restoreTimer) {
+                clearTimeout(btn._restoreTimer);
+                btn._restoreTimer = null;
+            }
             throw err;
         });
 }
