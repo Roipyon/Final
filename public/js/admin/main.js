@@ -6,6 +6,7 @@ import { NoticeCard } from '../common/components/NoticeCard.js';
 import { openFilterDrawer, closeFilterDrawer, createFilterDrawer } from '../common/filterDrawer.js';
 import { WSClient } from '../common/websocket.js';
 import { Modal } from '../common/components/Modal.js';
+import { openActionSheet, closeActionSheet } from '../common/actionSheet.js';
 
 let currentSection = 'dashboard';
 
@@ -286,11 +287,16 @@ async function renderClassManage() {
                             ▼ 展开学生
                         </button>
                     </div>
-                    <div>
+                    <!-- PC 端操作区 -->
+                    <div class="pc-actions" style="display:flex; gap:6px;">
                         <select class="bind-teacher-select" data-classid="${c.id}">${teacherOptions}</select>
-                        <button class="btn-sm btn-danger delete-class-btn" data-id="${c.id}">删除班级</button>
+                        <button class="btn-sm btn-danger delete-class-btn" data-id="${c.id}">删除</button>
                         <button class="btn-sm edit-class-btn" data-id="${c.id}" data-name="${escapeHtml(c.rawClassName)}" data-grade-id="${c.gradeId}">编辑</button>
-                        <button class="btn-sm btn-primary add-student-btn" data-class-id="${c.id}">+ 添加学生</button>
+                        <button class="btn-sm btn-primary add-student-btn" data-class-id="${c.id}">+ 学生</button>
+                    </div>
+                    <!-- 移动端操作按钮 -->
+                    <div class="mobile-actions" style="display:none;">
+                        <button class="btn-sm mobile-menu-btn" data-class-id="${c.id}">操作</button>
                     </div>
                 </div>
                 <div id="${studentContainerId}" class="student-list-container" style="margin-top:16px; display:none;">
@@ -417,7 +423,87 @@ async function renderClassManage() {
             return;
         }
     });
-    
+
+    // 移动端班级收纳
+    section.addEventListener('click', (e) => {
+        const menuBtn = e.target.closest('.mobile-menu-btn');
+        if (!menuBtn) return;
+
+        const classId = menuBtn.dataset.classId;
+        const classData = AdminState.classes.find(c => c.id == classId);
+        if (!classData) return;
+
+        // 构建教师下拉框选项
+        let teacherOptions = '<option value="">-- 解绑教师 --</option>';
+        AdminState.allTeachers.forEach(t => {
+            const selected = classData.teacherId === t.id ? 'selected' : '';
+            teacherOptions += `<option value="${t.id}" ${selected}>${escapeHtml(t.name)}</option>`;
+        });
+
+        const extraHTML = `
+            <div class="form-group">
+                <label>班主任</label>
+                <select id="sheetTeacherSelect_${classId}" class="filter-select" style="width:100%;">${teacherOptions}</select>
+            </div>
+        `;
+
+        openActionSheet({
+            title: `班级操作 · ${classData.className}`,
+            extraHTML,
+            actions: [
+                {
+                    text: '编辑班级',
+                    onClick: () => {
+                        AdminState.currentEditClassId = classId;
+                        document.getElementById('editClassName').value = classData.rawClassName;
+                        const gradeSelect = document.getElementById('editClassGradeId');
+                        gradeSelect.innerHTML = AdminState.gradeList.map(g => 
+                            `<option value="${g.id}" ${g.id == classData.gradeId ? 'selected' : ''}>${g.grade_name}</option>`
+                        ).join('');
+                        document.getElementById('editClassModal').style.display = 'flex';
+                    }
+                },
+                {
+                    text: '添加学生',
+                    onClick: () => {
+                        AdminState.currentAddStudentClassId = classId;
+                        document.getElementById('studentName').value = '';
+                        document.getElementById('studentId').value = '';
+                        document.getElementById('addStudentModal').style.display = 'flex';
+                    }
+                },
+                {
+                    text: '删除班级',
+                    onClick: async () => {
+                        const confirmed = await Modal.confirm('确定删除该班级吗？所有学生关联将被移除。');
+                        if (confirmed) {
+                            await API.admin.deleteClass(classId);
+                            renderClassManage();
+                            renderDashboard();
+                        }
+                    }
+                }
+            ]
+        });
+
+        // 绑定教师下拉框变更事件（独立处理，不影响外部）
+        const teacherSelect = document.getElementById(`sheetTeacherSelect_${classId}`);
+        if (teacherSelect) {
+            teacherSelect.addEventListener('change', async (e) => {
+                const newTeacherId = e.target.value || null;
+                try {
+                    await API.admin.bindTeacher(classId, newTeacherId);
+                    Modal.alert('班主任已更新');
+                    // 可选：刷新卡片显示
+                    renderClassManage();
+                } catch (err) {
+                    Modal.alert(err.message || '绑定失败');
+                }
+                closeActionSheet();
+            });
+        }
+    });
+
     // 绑定事件
     document.getElementById('openAddClassBtn')?.addEventListener('click', openAddClassModal);
     document.getElementById('openAddTeacherBtn')?.addEventListener('click', openAddTeacherModal);

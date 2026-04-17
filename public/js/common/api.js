@@ -30,7 +30,6 @@ const API = {
             return data;
         } catch (err) {
             console.error('API Error:', err);
-            alert('操作失败，请稍后重试');
             throw err;
         }
     },

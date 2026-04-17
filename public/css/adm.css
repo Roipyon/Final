@@ -866,3 +866,79 @@ hr {
     border-radius: 12px;
     margin-bottom: 16px;
 }
+
+/* 班级管理收纳 */
+.action-sheet-backdrop {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 1000;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+.action-sheet-backdrop.show { opacity: 1; }
+
+.action-sheet {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    background: white;
+    border-radius: 16px 16px 0 0;
+    z-index: 1001;
+    transform: translateY(100%);
+    transition: transform 0.25s ease;
+    max-height: 70vh;
+    overflow-y: auto;
+}
+.action-sheet.show { transform: translateY(0); }
+
+.action-sheet-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    font-weight: 600;
+}
+.action-sheet-close {
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    color: var(--gray);
+}
+.action-sheet-body {
+    padding: 16px 20px;
+}
+.action-sheet-footer {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px 20px 20px;
+}
+.action-sheet-btn {
+    background: white;
+    border: 1px solid var(--border);
+    padding: 12px;
+    border-radius: 8px;
+    font-size: 16px;
+    text-align: left;
+    cursor: pointer;
+}
+.action-sheet-cancel {
+    background: var(--gray-light);
+    border: none;
+    padding: 14px;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+/* 移动端隐藏 PC 操作区，显示移动操作按钮 */
+@media (max-width: 767px) {
+    .class-card .pc-actions { display: none !important; }
+    .class-card .mobile-actions { display: block !important; }
+}
+@media (min-width: 768px) {
+    .class-card .mobile-actions { display: none !important; }
+}
