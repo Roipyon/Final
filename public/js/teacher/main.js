@@ -18,8 +18,13 @@ async function loadBaseData() {
     const exams = await API.teacher.getExams();
     TeacherState.examList = exams;
     
-    const notices = await API.teacher.getNotices();
-    TeacherState.notices = notices;
+    // 未绑定班级时不请求通知，直接赋空数组
+    if (TeacherState.classId === null) {
+        TeacherState.notices = [];
+    } else {
+        const notices = await API.teacher.getNotices();
+        TeacherState.notices = notices;
+    }
 }
 
 async function refreshAllData(examDate = '') {
@@ -39,6 +44,25 @@ async function refreshAllData(examDate = '') {
 async function renderHome() {
     const section = document.getElementById('homeSection');
     section.innerHTML = TeacherRender.homeSkeleton();
+
+    // 未绑定班级时，直接显示提示页，不加载后续数据
+    if (TeacherState.classId === null) {
+        console.log('ok')
+        section.innerHTML = `
+            <div style="text-align: center; padding: 60px 20px;">
+                <h3 style="margin-bottom: 16px;">尚未分配班级</h3>
+                <p style="color: var(--gray); margin-bottom: 24px;">
+                    您当前没有负责的班级，请联系教务主任将您绑定到具体班级。
+                </p>
+                <p style="color: var(--gray); font-size: 14px;">
+                    绑定后即可查看成绩、发布通知等操作。
+                </p>
+            </div>
+        `;
+        // 隐藏侧边栏除首页外的其他菜单项
+        document.querySelectorAll('.sidebar-menu li:not(:first-child)').forEach(el => el.style.display = 'none');
+        return;
+    }
 
     const unreadCount = TeacherState.notices.filter(n => n.unreadCount > 0).length;
     
@@ -240,8 +264,8 @@ async function renderNoticeModule() {
         <h3>班级通知管理</h3>
         <div class="card" style="background:#f9f9f9; padding:16px;">
             <h4>发布新通知</h4>
-            <div class="form-group"><label>标题</label><input type="text" id="newTitle" placeholder="通知标题"></div>
-            <div class="form-group"><label>内容</label><textarea id="newContent" rows="4"></textarea></div>
+            <div class="form-group"><label>标题</label><input type="text" id="newTitle" placeholder="通知标题" style="outline:none;"></div>
+            <div class="form-group"><label>内容</label><textarea id="newContent" rows="4" style="outline:none;resize:none;" placeholder="通知内容"></textarea></div>
             <button id="publishNoticeBtn" class="btn-primary">发布通知</button>
         </div>
         <div style="display:flex;justify-content:space-between;align-items:center;">
@@ -397,6 +421,12 @@ async function renderLogModule() {
 
 //  模块切换 
 async function switchSection(sectionId) {
+    // 未绑定班级时，只允许访问首页
+    if (TeacherState.classId === null && sectionId !== 'home') {
+        Modal.alert('您尚未分配班级，请联系教务主任绑定后再使用此功能');
+        return;
+    }
+
     currentSection = sectionId;
     document.querySelectorAll('.sidebar-menu a').forEach(l => l.classList.remove('active'));
     document.querySelector(`[data-nav="${sectionId}"]`)?.classList.add('active');
@@ -557,12 +587,23 @@ function closeModal(id) { document.getElementById(id).style.display = 'none'; }
 //  初始化 
 async function init() {
     await loadBaseData();
-    await refreshAllData();
     
     const header = TeacherRender.headerInfo();
     document.querySelector('.user-avatar').innerText = header.avatar;
     document.querySelector('.user-info span').innerText = header.name;
+
+    // 未绑定班级时，直接显示首页提示，不加载成绩等依赖班级的数据
+    if (TeacherState.classId === null) {
+        bindGlobalEvents();
+        switchSection('home'); // renderHome 会显示未绑定提示并隐藏其他菜单
+        document.getElementById('logoutBtn')?.addEventListener('click', () => API.logout());
+        createFilterDrawer();
+        // 不初始化 WebSocket，因为没有班级订阅意义
+        return;
+    }
     
+    await refreshAllData();
+
     bindGlobalEvents();
     switchSection('home');
     

@@ -28,6 +28,7 @@ async function loadBaseData() {
     ]);
     AdminState.currentAdmin = info;
     AdminState.allClasses = allClasses;
+    AdminState.classNames = allClasses.map(s => s.className);
     AdminState.allTeachers = teachers;
     AdminState.gradeList = grades;
     AdminState.examList = exams;
@@ -262,12 +263,12 @@ async function renderClassManage() {
         pageSize: AdminState.classesPageSize
     };
     const res = await API.admin.getClasses(params);
-    AdminState.classes = res.data;
+    AdminState.pagedClasses = res.data;
     AdminState.classesTotal = res.total;
     
     // 生成班级卡片 HTML
     let classListHtml = '';
-    for (let c of AdminState.classes) {
+    for (let c of AdminState.pagedClasses) {
         // 学生列表容器，初始为空，点击后加载
         const studentContainerId = `student-list-${c.id}`;
         
@@ -345,7 +346,7 @@ async function renderClassManage() {
                 if (!isLoaded) {
                     try {
                         const students = await API.request(`/admin/classes/${classId}/students`);
-                        const classData = AdminState.classes.find(c => c.id == classId);
+                        const classData = AdminState.allClasses.find(c => c.id == classId);
                         if (classData) classData.students = students;
 
                         let studentHtml = '';
@@ -388,7 +389,7 @@ async function renderClassManage() {
                 const container = document.getElementById(`student-list-${classId}`);
                 if (container) {
                     const students = await API.request(`/admin/classes/${classId}/students`);
-                    const classData = AdminState.classes.find(c => c.id == classId);
+                    const classData = AdminState.allClasses.find(c => c.id == classId);
                     if (classData) classData.students = students;
 
                     let html = '';
@@ -430,7 +431,7 @@ async function renderClassManage() {
         if (!menuBtn) return;
 
         const classId = menuBtn.dataset.classId;
-        const classData = AdminState.classes.find(c => c.id == classId);
+        const classData = AdminState.allClasses.find(c => c.id == classId);
         if (!classData) return;
 
         // 构建教师下拉框选项
@@ -583,9 +584,9 @@ async function renderNoticeAll() {
     AdminState.noticesTotal = res.total;       // 符合条件的总通知数
         
     let filterHtml = '<select id="classFilterNotice" class="filter-select"><option value="all">所有班级</option>';
-    AdminState.classes.forEach(c => {
-        const selected = AdminState.globalClassFilter === c.className ? 'selected' : '';
-        filterHtml += `<option value="${escapeHtml(c.className)}" ${selected}>${escapeHtml(c.className)}</option>`;
+    AdminState.classNames.forEach(c => {
+        const selected = AdminState.globalClassFilter === c ? 'selected' : '';
+        filterHtml += `<option value="${escapeHtml(c)}" ${selected}>${escapeHtml(c)}</option>`;
     });
     filterHtml += '</select>';
     
@@ -840,8 +841,8 @@ function closeModal(id) { document.getElementById(id).style.display = 'none'; }
 async function openAddScoreModal() {
     const classSelect = document.getElementById('addScoreClass');
     classSelect.innerHTML = '<option value="">请选择班级</option>';
-    AdminState.classes.forEach(c => {
-        classSelect.innerHTML += `<option value="${escapeHtml(c.className)}">${escapeHtml(c.className)}</option>`;
+    AdminState.classNames.forEach(c => {
+        classSelect.innerHTML += `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`;
     });
     
     // 科目输入框预填当前筛选科目（总分除外）
@@ -1043,7 +1044,7 @@ async function confirmAddStudent() {
                 // 重新获取学生数据
                 const students = await API.request(`/admin/classes/${classId}/students`);
                 // 更新缓存
-                const classData = AdminState.classes.find(c => c.id == classId);
+                const classData = AdminState.allClasses.find(c => c.id == classId);
                 if (classData) {
                     classData.students = students;
                     classData.studentCount = students.length;

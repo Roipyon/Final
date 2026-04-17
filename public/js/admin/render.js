@@ -34,7 +34,7 @@ export const AdminRender = {
     
     filterBar() {
         const classOptions = '<option value="所有班级">所有班级</option>' +
-            AdminState.classes.map(c => `<option value="${c.className}" ${AdminState.globalClassFilter === c.className ? 'selected' : ''}>${escapeHtml(c.className)}</option>`).join('');
+            AdminState.classNames.map(c => `<option value="${c}" ${AdminState.globalClassFilter === c ? 'selected' : ''}>${escapeHtml(c)}</option>`).join('');
         
         const subjectOptions = AdminState.allSubjects.map(sub =>
             `<option value="${sub}" ${AdminState.globalSubjectFilter === sub ? 'selected' : ''}>${sub}</option>`
@@ -55,7 +55,7 @@ export const AdminRender = {
                 <select id="examSelect" class="filter-select">${examOptions}</select>
                 <select id="classFilterAll" class="filter-select">${classOptions}</select>
                 <select id="subjectFilterAll" class="filter-select">${subjectOptions}</select>
-                <input type="text" id="searchInput" placeholder="搜索班级/姓名/学号" value="${escapeHtml(AdminState.currentSearchKeyword)}" style="width:180px;">
+                <input type="text" id="searchInput" placeholder="搜索班级/姓名/学号" value="${escapeHtml(AdminState.currentSearchKeyword)}" style="width:180px;outline:none;">
                 <button id="searchBtn" class="btn-sm">搜索</button>
                 <div style="display:flex; gap:4px; margin-left:auto;">
                     <select id="sortFieldSelect" class="filter-select" style="width:auto;">${sortOptions}</select>

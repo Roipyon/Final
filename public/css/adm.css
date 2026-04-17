@@ -942,3 +942,7 @@ hr {
 @media (min-width: 768px) {
     .class-card .mobile-actions { display: none !important; }
 }
+
+select {
+   outline: none; 
+}

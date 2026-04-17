@@ -6,12 +6,13 @@ export const AdminState = {
     currentAdmin: null,
     
     // 基础数据
-    classes: [],
     allTeachers: [],
     gradeList: [],
     examList: [],
     allSubjects: [],
     allClasses: [],
+    classNames: [],
+    pagedClasses: [],
     
     // 成绩数据
     allScores: [],

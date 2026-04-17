@@ -11,7 +11,6 @@ const student = require('./routes/student');
 const teacher = require('./routes/teacher');
 const admin = require('./routes/admin');
 const login = require('./routes/auth');
-require('dotenv').config();
 
 app.use(express.json());
 app.use(session({

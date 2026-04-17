@@ -100,7 +100,7 @@ function renderHomeModule() {
             <thead><tr><th>科目</th><th>成绩</th><th>班级均分</th><th>对比</th></tr></thead>
             <tbody>${StudentRender.scoreHighlightTable(StudentState.personalScores)}</tbody>
         </table>
-        <div style="text-align:right;"><a href="#" data-nav="score" class="nav-link">查看全部成绩 →</a></div>
+        <div style="text-align:right;margin-top:10px;"><a href="#" data-nav="score" class="nav-link">查看全部成绩 →</a></div>
         
         <h4 style="margin-top:24px;margin-bottom:12px">最新班级通知 <span class="badge unread-badge">${unread}条未读</span></h4>
         <div id="homeNoticeList"></div>

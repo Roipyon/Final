@@ -650,6 +650,34 @@ router.put('/classes/:classId/teacher',isAdmin,async(req,res)=>{
 router.put('/classes/:classId',isAdmin,async(req,res)=>{
     const classId = parseInt(req.params.classId);
     const { className, gradeId } = req.body;
+    // 如果要修改班级名称或年级，需检查唯一性
+    if (className !== undefined || gradeId !== undefined) {
+        try {
+            // 获取当前班级的原年级和原名称（用于判断是否需要检查）
+            const [current] = await pool.query(
+                'SELECT grade_id, class_name FROM classes WHERE id = ?',
+                [classId]
+            );
+            if (current.length === 0) {
+                return res.status(404).json({ success: false, message: '班级不存在' });
+            }
+
+            const newClassName = className !== undefined ? className : current[0].class_name;
+            const newGradeId = gradeId !== undefined ? gradeId : current[0].grade_id;
+
+            // 检查同年级下是否存在同名班级（排除自身）
+            const [existing] = await pool.query(
+                'SELECT id FROM classes WHERE grade_id = ? AND class_name = ? AND id != ?',
+                [newGradeId, newClassName, classId]
+            );
+            if (existing.length > 0) {
+                return res.status(400).json({ success: false, message: '该年级下已存在同名班级' });
+            }
+        } catch (err) {
+            console.error(err);
+            return res.status(500).json({ success: false, message: '校验失败' });
+        }
+    }
     let updateFields = [];
     let values = [];
     if (className !== undefined) {
@@ -666,10 +694,10 @@ router.put('/classes/:classId',isAdmin,async(req,res)=>{
     values.push(classId);
     try {
         await pool.query(`UPDATE classes SET ${updateFields.join(', ')} WHERE id = ?`, values);
-        res.json({ success: true });
+        res.json({ success: true, message: '修改成功'});
     } catch (err) {
         console.error(err);
-        res.status(500).json({ success: false });
+        res.status(500).json({ success: false, message: '更新失败'});
     }
 });
 
@@ -693,6 +721,13 @@ router.post('/classes',isAdmin,async(req,res)=>{
         return res.status(400).json({ success: false, message: '班级名称和年级ID不能为空' });
     }
     try {
+        const [existing] = await pool.query(
+            'SELECT id FROM classes WHERE grade_id = ? AND class_name = ?',
+            [gradeId, className]
+        );
+        if (existing.length > 0) {
+            return res.status(400).json({ success: false, message: '该年级下已存在同名班级' });
+        }
         const [result] = await pool.query(
             'INSERT INTO classes (class_name, grade_id) VALUES (?, ?)',
             [className, gradeId]
