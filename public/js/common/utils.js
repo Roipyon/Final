@@ -23,21 +23,6 @@ function formatDateTime(dateStr) {
     return d.toLocaleString();
 }
 
-function computeStats(scoresArray) {
-    if (!scoresArray || scoresArray.length === 0) {
-        return { avg: '0.0', max: 0, min: 0, passCount: 0, total: 0, passRate: '0%' };
-    }
-    const arr = scoresArray.map(s => parseFloat(s.score) || 0);
-    const sum = arr.reduce((a, b) => a + b, 0);
-    const avg = (sum / arr.length).toFixed(1);
-    const max = Math.max(...arr);
-    const min = Math.min(...arr);
-    const passCount = arr.filter(s => s >= 60).length;
-    const total = arr.length;
-    const passRate = ((passCount / total) * 100).toFixed(1) + '%';
-    return { avg, max, min, passCount, total, passRate };
-}
-
 // 防抖函数
 function debounce(fn, delay = 300) {
     let timer = null;
@@ -61,23 +46,18 @@ function isNewNotice(publishTime) {
  */
 function renderSmartPagination(currentPage, totalPages) {
     if (totalPages <= 1) return '';
-
     const maxVisible = 5;  // 最多显示5个页码按钮
     let startPage = Math.max(1, currentPage - Math.floor(maxVisible / 2));
     let endPage = Math.min(totalPages, startPage + maxVisible - 1);
-
     // 调整起始页，确保显示足够数量
     if (endPage - startPage + 1 < maxVisible) {
         startPage = Math.max(1, endPage - maxVisible + 1);
     }
-
     let html = '<div class="pagination">';
-
     // 上一页
     if (currentPage > 1) {
         html += `<button class="page-btn" data-page="${currentPage - 1}">上一页</button>`;
     }
-
     // 首页省略
     if (startPage > 1) {
         html += `<button class="page-btn" data-page="1">1</button>`;
@@ -85,12 +65,10 @@ function renderSmartPagination(currentPage, totalPages) {
             html += '<span class="page-ellipsis">...</span>';
         }
     }
-
     // 中间页码
     for (let i = startPage; i <= endPage; i++) {
         html += `<button class="page-btn ${i === currentPage ? 'active-page' : ''}" data-page="${i}">${i}</button>`;
     }
-
     // 尾页省略
     if (endPage < totalPages) {
         if (endPage < totalPages - 1) {
@@ -98,12 +76,10 @@ function renderSmartPagination(currentPage, totalPages) {
         }
         html += `<button class="page-btn" data-page="${totalPages}">${totalPages}</button>`;
     }
-
     // 下一页
     if (currentPage < totalPages) {
         html += `<button class="page-btn" data-page="${currentPage + 1}">下一页</button>`;
     }
-
     html += '</div>';
     return html;
 }
@@ -118,17 +94,16 @@ function renderSmartPagination(currentPage, totalPages) {
 function withLock(btn, asyncFn, options = {}) {
     const { loadingText = '处理中...', successText = null, successDuration = 1500 } = options;
     if (btn.disabled) return Promise.reject(Modal.alert('操作进行中，请稍候'));
-
+    // 设置按钮文案
     const originalText = btn.textContent;
     btn.disabled = true;
     btn.textContent = loadingText;
-
     // 清除之前可能残留的恢复定时器
     if (btn._restoreTimer) {
         clearTimeout(btn._restoreTimer);
         btn._restoreTimer = null;
     }
-
+    // 返回执行结果
     return asyncFn()
         .then(result => {
             btn.disabled = false;

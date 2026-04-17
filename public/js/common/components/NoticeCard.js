@@ -182,6 +182,6 @@ export class NoticeCard {
     // 辅助：格式化日期
     _formatDate(dateStr) {
         if (!dateStr) return '';
-        return new Date(dateStr).toLocaleDateString('zh-CN');
+        return new Date(dateStr).toLocaleString('zh-CN');
     }
 }
