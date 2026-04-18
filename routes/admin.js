@@ -280,38 +280,50 @@ router.get('/totalscores',isAdmin,async(req,res)=>{
         const direction = sortOrder === 'asc' ? 'ASC' : 'DESC';
 
         // 全量统计数据
-        const statsSQL = `
+        let statsSQL = `
             SELECT
                 ROUND(AVG(total_score), 1) AS avg,
                 MAX(total_score) AS max,
                 MIN(total_score) AS min,
                 COUNT(*) AS totalStu
             FROM (
-                SELECT SUM(s.score) AS total_score
+                SELECT SUM(s.score) AS total_score,
+                CONCAT(g.grade_name, c.class_name) AS className
                 FROM scores s
                 INNER JOIN users u ON s.student_id = u.id
                 INNER JOIN classes c ON s.class_id = c.id
                 INNER JOIN grades g ON g.id = c.grade_id
                 ${whereSQL}
-                GROUP BY u.id
+                GROUP BY u.id, c.id
             ) AS student_totals
         `;
-        const [statsRows] = await pool.query(statsSQL, params);
+        const statsParams = [...params];
+        if (class_name && class_name !== '所有班级') {
+            statsSQL += ` WHERE className = ?`;
+            statsParams.push(class_name);
+        }
+        const [statsRows] = await pool.query(statsSQL, statsParams);
         const stats = statsRows[0] || {};
 
         // 总数查询
-        const countSQL = `
+        let countSQL = `
             SELECT COUNT(*) AS total FROM (
-                SELECT u.id
+                SELECT u.id,
+                CONCAT(g.grade_name, c.class_name) AS className
                 FROM scores s
                 INNER JOIN users u ON s.student_id = u.id
                 INNER JOIN classes c ON s.class_id = c.id
                 INNER JOIN grades g ON g.id = c.grade_id
                 ${whereSQL}
-                GROUP BY u.id
+                GROUP BY u.id, c.id
             ) AS student_list
         `;
-        const [countRows] = await pool.query(countSQL, params);
+        const countParams = [...params];
+        if (class_name && class_name !== '所有班级') {
+            countSQL += ` WHERE className = ?`;
+            countParams.push(class_name);
+        }
+        const [countRows] = await pool.query(countSQL, countParams);
         const total = countRows[0].total;
 
         // 分页数据查询（含班级筛选）

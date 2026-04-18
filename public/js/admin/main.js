@@ -255,7 +255,10 @@ async function renderDashboard() {
 
 // 班级管理 
 async function renderClassManage() {
-    const section = document.getElementById('classManageSection');
+    // 通过克隆节点移除所有旧监听器，避免累积
+    const oldSection = document.getElementById('classManageSection');
+    const section = oldSection.cloneNode(false); // 不克隆子元素
+    oldSection.parentNode.replaceChild(section, oldSection);
     section.innerHTML = AdminRender.classManageSkeleton();
 
     const params = {
@@ -907,6 +910,8 @@ async function confirmAddScore() {
             }
             await API.admin.addScore({ className, studentName, studentId, subject, score, examDate });
             closeModal('addScoreModal');
+            const freshSubjects = await API.admin.getSubjects();
+            AdminState.allSubjects = freshSubjects;
             renderScoreAll();
             if (currentSection === 'dashboard') renderDashboard();
         }, { loadingText: '添加中...', successText: '添加成功' });
@@ -1270,6 +1275,13 @@ async function importFromCSV(csvText) {
         message += [...errors, ...failErrors].slice(0, 5).join('\n');
     }
     Modal.alert(message);
+
+    const [exams, subjects] = await Promise.all([
+        API.admin.getExams(),
+        API.admin.getSubjects()
+    ]);
+    AdminState.examList = exams;
+    AdminState.allSubjects = subjects;
 
     await renderScoreAll();
 }

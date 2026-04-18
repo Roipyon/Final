@@ -7,6 +7,7 @@ import { WSClient } from '../common/websocket.js';
 import { Modal } from '../common/components/Modal.js';
 
 let currentSection = 'home';
+const noticeCardMap = new Map();
 
 // 数据加载 
 async function loadBaseData() {
@@ -60,9 +61,8 @@ async function markAsRead(noticeId) {
         updateUnreadBadge();
         try {
             await API.student.markNoticeRead(noticeId);
-            // 成功，重新渲染当前模块
-            if (currentSection === 'notice') renderNoticeModule();
-            else if (currentSection === 'home') renderHomeModule();
+            const card = noticeCardMap.get(noticeId);
+            if (card) card.markAsRead();
         } catch (err) {
             // 回滚状态
             notice.isRead = false;
@@ -126,6 +126,7 @@ function renderHomeModule() {
                 switchSection('notice');
             });
             card.mount(homeNoticeContainer);
+            noticeCardMap.set(notice.id, card); 
         });
     }
 }
@@ -243,6 +244,7 @@ function renderNoticeModule() {
 
     const container = document.getElementById('noticeListContainer');
     container.innerHTML = '';
+    noticeCardMap.clear();
 
     pageNotices.forEach(notice => {
         const isRead = notice.isRead === 1 || notice.isRead === true;
@@ -259,6 +261,7 @@ function renderNoticeModule() {
             }
         });
         card.mount(container);
+        noticeCardMap.set(notice.id, card);
     });
 
     // 绑定筛选按钮
