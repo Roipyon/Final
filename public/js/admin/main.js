@@ -434,7 +434,8 @@ async function renderClassManage() {
         if (!menuBtn) return;
 
         const classId = menuBtn.dataset.classId;
-        const classData = AdminState.allClasses.find(c => c.id == classId);
+        const classData = AdminState.pagedClasses?.find(c => c.id == classId) 
+                || AdminState.allClasses.find(c => c.id == classId);
         if (!classData) return;
 
         // 构建教师下拉框选项
@@ -1322,6 +1323,10 @@ function bindModalEvents() {
 
 // 初始化 
 async function init() {
+    const dashboardSection = document.getElementById('dashboardSection');
+    if (dashboardSection) {
+        dashboardSection.innerHTML = AdminRender.dashboardSkeleton();
+    }
     await loadBaseData();
     const header = AdminRender.headerInfo();
     document.querySelector('.user-avatar').innerText = header.avatar;
