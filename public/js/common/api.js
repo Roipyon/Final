@@ -176,6 +176,10 @@ const API = {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ notice_id: noticeId, is_read: 1 })
         }),
+        getDiagnosis: (subject = '') => {
+            const query = subject ? `?subject=${encodeURIComponent(subject)}` : '';
+            return API.request(`/student/diagnosis${query}`);
+        }
     }
 };
 

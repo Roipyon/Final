@@ -267,7 +267,7 @@ export const StudentRender = {
             ctx.fillText('平均', lx + 6, ly + 28); // 再下移一点
         }
 
-        // 折线与描点（无变化）
+        // 折线与描点
         if (data.length === 1) {
             const x = padding.left + chartW / 2;
             const y = height - padding.bottom - (data[0].score / maxFullMark) * chartH;

@@ -242,6 +242,25 @@ async function renderScoreModule() {
             }
         });
     });
+    const diagnosisContainer = document.createElement('div');
+    diagnosisContainer.id = 'diagnosisContainer';
+    diagnosisContainer.style.marginTop = '24px';
+    diagnosisContainer.innerHTML = '<div class="skeleton" style="height:60px;">正在生成智能诊断...</div>';
+    section.appendChild(diagnosisContainer);
+
+    // 异步获取诊断
+    API.student.getDiagnosis(StudentState.currentSubjectFilter)
+    .then(res => {
+        document.getElementById('diagnosisContainer').innerHTML = `
+            <div class="card" style="background:#f0f7ff; padding: 16px; border-left: 4px solid #4096ff;">
+                <h4 style="margin-bottom:8px;">AI 学业诊断</h4>
+                <p style="white-space: pre-wrap; line-height: 1.6;">${escapeHtml(res.diagnosis)}</p>
+            </div>
+        `;
+    })
+    .catch(err => {
+        document.getElementById('diagnosisContainer').innerHTML = '<p style="color:gray;">诊断生成失败，请稍后重试</p>';
+    });
 }
 
 // 通知模块 

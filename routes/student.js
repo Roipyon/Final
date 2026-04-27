@@ -3,6 +3,7 @@ const router = express.Router();
 const pool = require('../utils/pool');
 const addLog = require('../utils/logger');
 const { isStudent } = require('../middleware/auth');
+require('dotenv').config();
 
 router.use(isStudent);
 
@@ -280,6 +281,126 @@ router.get('/trend',isStudent,async(req,res)=>{
     `, [classId, subject, userId, subject]);
 
     res.json(rows);
+});
+// 学业诊断接口
+router.get('/diagnosis',isStudent,async(req,res)=>{
+    const account = req.session.account;
+    const { subject } = req.query; // 指定科目；不传则全科诊断
+
+    // 获取学生信息
+    const [user] = await pool.query('SELECT id, real_name FROM users WHERE account = ?', [account]);
+    const userId = user[0].id;
+    const studentName = user[0].real_name;
+
+    // 获取班级 ID
+    const [classInfo] = await pool.query(
+        'SELECT class_id FROM class_members WHERE student_id = ? AND status = 1 LIMIT 1',
+        [userId]
+    );
+    if (classInfo.length === 0) return res.json({ diagnosis: '未分配班级，无法生成诊断' });
+    const classId = classInfo[0].class_id;
+
+    // 获取历次考试成绩数据（学生各科成绩 + 班级平均分）
+    let subjectCondition = '';
+    const params = [classId, userId];
+    if (subject) {
+        subjectCondition = 'AND s.subject = ?';
+        params.push(subject);
+    }
+
+    const [allScores] = await pool.query(`
+        SELECT 
+            s.exam_date,
+            s.subject,
+            s.score,
+            s.full_mark,
+            ROUND(
+                (SELECT AVG(s2.score) 
+                 FROM scores s2 
+                 WHERE s2.class_id = ? 
+                   AND s2.subject = s.subject 
+                   AND s2.exam_date = s.exam_date), 
+                1
+            ) AS class_avg
+        FROM scores s
+        WHERE s.student_id = ? ${subjectCondition}
+        ORDER BY s.exam_date ASC, s.subject
+    `, params);
+
+    if (allScores.length === 0) {
+        return res.json({ diagnosis: '暂无考试成绩记录，无法生成诊断' });
+    }
+
+    // 构建 Prompt
+    let prompt = `你是一位专业的学业诊断分析师。请根据以下学生的考试成绩数据，生成一份约150字的个人化学业诊断报告。内容需包括：\n`;
+    prompt += `要求：1. 请勿凭空产生或者捏造不存在的或者尚未接收到的信息，例如知识点的缺陷和遗漏方面；
+                2. 实事求是，根据已接收到的成绩数据进行分析，不得根据不存在的成绩信息进行字数的补全。`
+    prompt += `\n1. 成绩变化趋势的整体评价；\n2. 2-3条具体可行的学习建议。\n`;
+    prompt += `学生姓名：${studentName}\n`;
+    
+    // 按科目整理数据
+    const subjectsMap = {};
+    allScores.forEach(row => {
+        if (!subjectsMap[row.subject]) subjectsMap[row.subject] = [];
+        subjectsMap[row.subject].push({
+            date: new Date(row.exam_date).toISOString().slice(0, 10),
+            score: row.score,
+            full: row.full_mark,
+            avg: row.class_avg
+        });
+    });
+
+    for (const [sub, records] of Object.entries(subjectsMap)) {
+        prompt += `\n科目：${sub}（满分通常为${records[0].full}）\n`;
+        records.forEach(r => {
+            prompt += `- ${r.date}：个人${r.score}分，班级平均${r.avg}分\n`;
+        });
+    }
+    prompt += `\n请直接输出诊断报告文本，不要包含任何额外解释或标记。`;
+    prompt += `\n请再次审查输出的内容是否严格遵循给定的要求。`;
+
+    // 调用大模型 API
+    const apiKey = process.env.AI_API_KEY;
+    const apiEndpoint = process.env.AI_API_ENDPOINT || 'https://openrouter.ai/api/v1/chat/completions';
+    const model = process.env.AI_MODEL || 'inclusionai/ling-2.6-flash:free';
+
+    try {
+        const aiRes = await fetch(apiEndpoint, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey}`
+            },
+            body: JSON.stringify({
+                model: model,
+                messages: [
+                    { role: 'system', content: '你是一个专业的学业分析师。' },
+                    { role: 'user', content: prompt }
+                ],
+                max_tokens: 500,
+                temperature: 0.7
+            })
+        });
+
+        if (!aiRes.ok) {
+            const errText = await aiRes.text();
+            console.error('AI API 调用失败:', errText);
+            return res.status(502).json({ success: false, message: 'AI 服务暂时不可用' });
+        }
+
+        const aiData = await aiRes.json();
+        console.log(aiData)
+        const diagnosis = aiData.choices[0].message.content.trim();
+
+        // 可选：记录日志
+        const [admin] = await pool.query('SELECT id, real_name FROM users WHERE account = ?', [account]);
+        await addLog(userId, studentName, 'student', 'AI诊断', `请求了学业诊断报告`, classId);
+
+        res.json({ diagnosis });
+    } catch (err) {
+        console.error('AI 请求异常:', err);
+        res.status(500).json({ success: false, message: '诊断生成失败' });
+    }
 });
 
 module.exports = router;
