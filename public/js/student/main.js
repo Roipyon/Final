@@ -9,6 +9,10 @@ import { Modal } from '../common/components/Modal.js';
 let currentSection = 'home';
 const noticeCardMap = new Map();
 
+// 趋势图 resize 管理
+let trendDataCache = null;
+let currentResizeHandler = null;
+
 // 数据加载 
 async function loadBaseData() {
     const info = await API.student.getInfo();
@@ -180,6 +184,32 @@ async function renderScoreModule() {
     `;
     section.innerHTML = html;
     
+    // 清除旧的 resize 监听
+    if (currentResizeHandler) {
+        window.removeEventListener('resize', currentResizeHandler);
+        currentResizeHandler = null;
+    }
+
+    const chartContainer = document.createElement('div');
+    chartContainer.id = 'trendContainer';
+    chartContainer.style.marginTop = '24px';
+    section.appendChild(chartContainer);
+
+    // 获取趋势数据（仅依赖科目，不受考试批次影响）
+    trendDataCache = await API.student.getTrend(StudentState.currentSubjectFilter);
+    StudentRender.trendChart(chartContainer, trendDataCache);
+
+    // 防抖重绘
+    const debouncedRedraw = debounce(() => {
+        const container = document.getElementById('trendContainer');
+        if (container && trendDataCache) {
+            StudentRender.trendChart(container, trendDataCache);
+        }
+    }, 200);
+
+    currentResizeHandler = debouncedRedraw;
+    window.addEventListener('resize', currentResizeHandler);
+
     document.getElementById('examSelect').addEventListener('change', async (e) => {
         StudentState.currentExamDate = formatDate(e.target.value);
         renderScoreModule();

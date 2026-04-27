@@ -152,5 +152,150 @@ export const StudentRender = {
                 ${Array(3).fill(0).map(() => `<div class="skeleton" style="width:36px; height:36px; border-radius:50%;"></div>`).join('')}
             </div>
         `;
-    }
+    },
+    
+    trendChart(container, data) {
+        container.innerHTML = '';
+        if (!data || !data.length) {
+            container.innerHTML = '<div class="empty-tip" style="text-align:center;padding:20px;">暂无趋势数据</div>';
+            return;
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.style.display = 'block';
+        canvas.style.width = '100%';
+        canvas.style.height = '200px';
+        container.appendChild(canvas);
+
+        const dpr = window.devicePixelRatio || 1;
+        const rect = container.getBoundingClientRect();
+        const width = rect.width;
+        const height = 200;
+        canvas.width = width * dpr;
+        canvas.height = height * dpr;
+        const ctx = canvas.getContext('2d');
+        ctx.scale(dpr, dpr);
+
+        const maxFullMark = Math.max(...data.map(d => d.full_mark), 100);
+        // 右侧留出更多空间（30→40）以容纳日期标签
+        const padding = { top: 20, right: 40, bottom: 50, left: 40 };
+        const chartW = width - padding.left - padding.right;
+        const chartH = height - padding.top - padding.bottom;
+
+        // 坐标轴
+        ctx.strokeStyle = '#e0e0e0';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(padding.left, padding.top);
+        ctx.lineTo(padding.left, height - padding.bottom);
+        ctx.lineTo(width - padding.right, height - padding.bottom);
+        ctx.stroke();
+
+        // X 轴日期标签（带边界约束）
+        const stepX = data.length > 1 ? chartW / (data.length - 1) : chartW / 2;
+        const labelInterval = Math.ceil(data.length / 6);
+        // 允许的最大 X 坐标（防止文字超出）
+        const maxLabelX = width - padding.right - 10;
+
+        data.forEach((d, i) => {
+            if (i % labelInterval !== 0 && i !== data.length - 1) return;
+            let x = padding.left + (data.length > 1 ? stepX * i : chartW / 2);
+            x = Math.min(x, maxLabelX);       // 不让标签越界
+
+            const dateStr = d.exam_date;
+            ctx.save();
+            ctx.translate(x, height - padding.bottom + 10);
+            ctx.fillStyle = '#666';
+            if (width < 500) {
+                ctx.rotate(-Math.PI / 4);
+                ctx.font = '9px sans-serif';
+                ctx.textAlign = 'right';       // 倾斜时用右对齐更安全
+                ctx.fillText(dateStr, 0, 0);
+            } else {
+                ctx.font = '10px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText(dateStr, 0, 0);
+            }
+            ctx.restore();
+        });
+
+        // 绘制班级平均分
+        const avgPoints = data.filter(d => d.class_avg != null);
+        if (avgPoints.length > 0) {
+            // 绘制红色虚线
+            ctx.beginPath();
+            ctx.strokeStyle = '#e63946';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([6, 4]);
+            avgPoints.forEach((d, i) => {
+                const idx = data.indexOf(d);
+                const x = padding.left + (data.length > 1 ? stepX * idx : chartW / 2);
+                const y = height - padding.bottom - (d.class_avg / maxFullMark) * chartH;
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            });
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // 为每个平均分数据点绘制圆点（半径4，红色）和分数标注（下方16px处）
+            avgPoints.forEach(d => {
+                const idx = data.indexOf(d);
+                const x = padding.left + (data.length > 1 ? stepX * idx : chartW / 2);
+                const y = height - padding.bottom - (d.class_avg / maxFullMark) * chartH;
+
+                // 圆节点
+                ctx.fillStyle = '#e63946';
+                ctx.beginPath();
+                ctx.arc(x, y, 4, 0, 2 * Math.PI);
+                ctx.fill();
+
+                // 分数标注（下方）
+                ctx.fillStyle = '#e63946';
+                ctx.font = '11px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText(d.class_avg, x, y + 16);
+            });
+
+            // 保留最后一个点的“平均”标签（位置稍下移避免与分数重叠）
+            const last = avgPoints[avgPoints.length - 1];
+            const lastIdx = data.indexOf(last);
+            const lx = padding.left + (data.length > 1 ? stepX * lastIdx : chartW / 2);
+            const ly = height - padding.bottom - (last.class_avg / maxFullMark) * chartH;
+            ctx.fillStyle = '#e63946';
+            ctx.font = '10px sans-serif';
+            ctx.textAlign = 'left';
+            ctx.fillText('平均', lx + 6, ly + 28); // 再下移一点
+        }
+
+        // 折线与描点（无变化）
+        if (data.length === 1) {
+            const x = padding.left + chartW / 2;
+            const y = height - padding.bottom - (data[0].score / maxFullMark) * chartH;
+            ctx.fillStyle = '#4096ff';
+            ctx.beginPath(); ctx.arc(x, y, 5, 0, 2 * Math.PI); ctx.fill();
+            ctx.fillStyle = '#333'; ctx.font = '12px sans-serif'; ctx.textAlign = 'center';
+            ctx.fillText(data[0].score, x, y - 12);
+        } else {
+            ctx.beginPath();
+            ctx.strokeStyle = '#4096ff'; ctx.lineWidth = 2;
+            data.forEach((d, i) => {
+                const x = padding.left + stepX * i;
+                const y = height - padding.bottom - (d.score / maxFullMark) * chartH;
+                i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+            });
+            ctx.stroke();
+
+            data.forEach((d, i) => {
+                const x = padding.left + stepX * i;
+                const y = height - padding.bottom - (d.score / maxFullMark) * chartH;
+                ctx.fillStyle = '#4096ff';
+                ctx.beginPath(); ctx.arc(x, y, 4, 0, 2 * Math.PI); ctx.fill();
+                ctx.fillStyle = '#333'; ctx.font = '11px sans-serif'; ctx.textAlign = 'center';
+                ctx.fillText(d.score, x, y - 12);
+            });
+        }
+
+        ctx.fillStyle = '#888'; ctx.font = '11px sans-serif'; ctx.textAlign = 'center';
+        ctx.fillText('个人分数趋势（满分:' + maxFullMark + '）', width / 2, height - 10);
+    },
 };

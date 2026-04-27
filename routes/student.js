@@ -243,5 +243,43 @@ router.post('/notices',isStudent,async(req,res)=>{
     }
     else res.status(500).json({success: false,message: '已读失败'});
 });
+// 获取某科目历次考试成绩趋势
+router.get('/trend',isStudent,async(req,res)=>{
+    const account = req.session.account;
+    const { subject } = req.query;
+    if (!subject) return res.status(400).json({ success: false, message: '科目不能为空' });
+
+    const [user] = await pool.query('SELECT id FROM users WHERE account = ?', [account]);
+    const userId = user[0].id;
+
+    // 获取学生班级 ID
+    const [classInfo] = await pool.query(
+        'SELECT class_id FROM class_members WHERE student_id = ? AND status = 1 LIMIT 1',
+        [userId]
+    );
+    if (classInfo.length === 0) return res.json([]);
+    const classId = classInfo[0].class_id;
+
+    // 查询学生个人成绩 + 该考试批次该科目的班级平均分
+    const [rows] = await pool.query(`
+        SELECT 
+            DATE_FORMAT(s.exam_date, '%Y-%m-%d') AS exam_date,
+            s.score,
+            s.full_mark,
+            ROUND(
+                (SELECT AVG(s2.score) 
+                 FROM scores s2 
+                 WHERE s2.class_id = ? 
+                   AND s2.subject = ? 
+                   AND s2.exam_date = s.exam_date), 
+                1
+            ) AS class_avg
+        FROM scores s
+        WHERE s.student_id = ? AND s.subject = ?
+        ORDER BY s.exam_date ASC
+    `, [classId, subject, userId, subject]);
+
+    res.json(rows);
+});
 
 module.exports = router;

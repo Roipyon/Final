@@ -158,6 +158,10 @@ const API = {
             const url = examDate ? `/student/grade?exam_date=${examDate}` : '/student/grade';
             return API.request(url);
         },
+        getTrend: (subject) => {
+            const query = new URLSearchParams({ subject }).toString();
+            return API.request(`/student/trend?${query}`);
+        },
         getTotalRank: (examDate = '') => {
             const url = examDate ? `/student/totalrank?exam_date=${examDate}` : '/student/totalrank';
             return API.request(url);
