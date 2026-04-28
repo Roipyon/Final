@@ -6,190 +6,198 @@ const { isTeacher } = require('../middleware/auth');
 
 router.use(isTeacher);
 
-// 教师端
+/**
+ * 根据账号获取教师基本信息：用户ID、真实姓名、身份、班级ID
+ * 若教师未分配班级，classId 为 null
+ */
+async function getTeacherInfo(account) {
+    const [rows] = await pool.query(
+        'SELECT id, real_name, identity FROM users WHERE account = ?',
+        [account]
+    );
+    if (rows.length === 0) return null;
+    const { id: userId, real_name: realName, identity } = rows[0];
+    const [classRows] = await pool.query(
+        'SELECT id FROM classes WHERE teacher_id = ?',
+        [userId]
+    );
+    const classId = classRows.length > 0 ? classRows[0].id : null;
+    return { userId, realName, identity, classId };
+}
+
+/**
+ * 解析考试日期：如明确提供则直接使用；否则返回该班级最近一次考试日期
+ * 若班级无考试记录，返回 null
+ */
+async function resolveExamDate(classId, examDate) {
+    if (examDate) return examDate;
+    if (!classId) return null;
+    const [dateRow] = await pool.query(
+        'SELECT MAX(exam_date) AS latest FROM scores WHERE class_id = ?',
+        [classId]
+    );
+    return dateRow[0].latest || null;
+}
+
+/**
+ * 验证通知是否属于当前教师班级，并返回通知信息
+ * @returns {Object|null} 返回 { class_id, title } 或 null（不存在或不属于）
+ */
+async function getNoticeForTeacher(noticeId, classId) {
+    const [rows] = await pool.query(
+        'SELECT class_id, title FROM notices WHERE id = ? AND is_deleted = 0',
+        [noticeId]
+    );
+    if (rows.length === 0) return null;
+    if (rows[0].class_id !== classId) return null;
+    return rows[0];
+}
+
+/**
+ * 推送新通知给班级学生和管理员
+ */
+async function pushNewNotice(noticeId, title, classId, sendToUser) {
+    try {
+        const [students] = await pool.query(
+        'SELECT student_id FROM class_members WHERE class_id = ? AND status = 1',
+        [classId]
+        );
+        const [admins] = await pool.query("SELECT id FROM users WHERE identity = 'admin'");
+        const payload = {
+        type: 'NEW_NOTICE',
+        data: { noticeId, title }
+        };
+        students.forEach(s => sendToUser(s.student_id, payload));
+        admins.forEach(a => sendToUser(a.id, payload));
+    } catch (pushErr) {
+        console.error('WebSocket 推送失败:', pushErr);
+    }
+}
 
 // 获取当前用户信息
-router.get('/info',isTeacher,async(req,res)=>{
-    const account = req.session.account;
-    const [rows] = await pool.query('select id,real_name from users where account = ?',[account]);
-    const userId = rows[0].id;
-    const realName = rows[0].real_name;
-    const [class_info] = await pool.query(`
-        SELECT c.id, CONCAT(g.grade_name, c.class_name) AS class_name
+router.get('/info', async (req, res) => {
+    const info = await getTeacherInfo(req.session.account);
+    if (!info) return res.status(400).json({ message: '用户不存在' });
+    const { userId, realName, classId } = info;
+    if (!classId) {
+        return res.json({ id: userId, name: realName, className: null, classId: null });
+    }
+    const [classRows] = await pool.query(
+        `SELECT c.id, CONCAT(g.grade_name, c.class_name) AS class_name
         FROM classes c
         JOIN grades g ON c.grade_id = g.id
-        WHERE c.teacher_id = ?
-    `,[userId]);
-    if (class_info.length === 0) {
-        return res.json({ 
-            id: userId,
-            name: realName, 
-            className: null, 
-            classId: null 
-        });
-    }
+        WHERE c.id = ?`,
+        [classId]
+    );
     res.json({
         id: userId,
         name: realName,
-        className: class_info[0].class_name,
-        classId: class_info[0].id
+        className: classRows[0].class_name,
+        classId
     });
 });
 
 // 获取当前本班可用的考试日期
-router.get('/exams',isTeacher,async(req,res)=>{
-    const account = req.session.account;
-    const [user] = await pool.query('SELECT id FROM users WHERE account = ?', [account]);
-    const userId = user[0].id;
-    // 获取学生班级ID
-    const [classRows] = await pool.query('SELECT id FROM classes WHERE teacher_id = ?', [userId]);
-    if (classRows.length === 0) return res.json([]);
-    const classId = classRows[0].id;
-    // 查询该班级所有不重复的考试日期，按时间倒序
-    const [rows] = await pool.query(`
-        SELECT DISTINCT exam_date 
-        FROM scores 
-        WHERE class_id = ? 
-        ORDER BY exam_date DESC
-    `, [classId]);
-    // 略去字段
+router.get('/exams', async (req, res) => {
+    const info = await getTeacherInfo(req.session.account);
+    if (!info || !info.classId) return res.json([]);
+    const [rows] = await pool.query(
+        `SELECT DISTINCT exam_date FROM scores WHERE class_id = ? ORDER BY exam_date DESC`,
+        [info.classId]
+    );
     res.json(rows.map(r => r.exam_date));
 });
 
 // 获取所有学生单科成绩
-router.get('/scores',isTeacher,async(req,res)=>{
-    const examDate = req.query.exam_date;
-    const account = req.session.account;
-    const [rows] = await pool.query('select id from users where account = ?',[account]);
-    const userId = rows[0].id;
-    // 获取班主任所带班级 ID
-    const [classRows] = await pool.query('SELECT id FROM classes WHERE teacher_id = ?', [userId]);
-    if (classRows.length === 0) return res.json([]);
-    const classId = classRows[0].id;
-    let targetDate = examDate;
-    if (!targetDate) {
-        const [dateRow] = await pool.query(`SELECT MAX(exam_date) AS latest FROM scores WHERE class_id = ?`, [classId]);
-        targetDate = dateRow[0].latest;
-        if (!targetDate) return res.json([]);
-    }
-    const [scores] = await pool.query(`
-        SELECT 
-            s.id as scoreId,
-            s.student_id AS id,
-            u.real_name AS studentName,
-            s.subject,
-            s.score,
-            s.exam_date,
-            RANK() OVER (PARTITION BY s.subject ORDER BY s.score DESC) AS class_subject_rank
+router.get('/scores', async (req, res) => {
+    const info = await getTeacherInfo(req.session.account);
+    if (!info || !info.classId) return res.json([]);
+    const targetDate = await resolveExamDate(info.classId, req.query.exam_date);
+    if (!targetDate) return res.json([]);
+
+    const [scores] = await pool.query(
+        `SELECT s.id AS scoreId,
+                s.student_id AS id,
+                u.real_name AS studentName,
+                s.subject,
+                s.score,
+                s.exam_date,
+                RANK() OVER (PARTITION BY s.subject ORDER BY s.score DESC) AS class_subject_rank
         FROM scores s
         JOIN users u ON s.student_id = u.id
         WHERE s.class_id = ? AND s.exam_date = ?
-        ORDER BY s.subject, s.score DESC
-    `, [classId, targetDate]);
+        ORDER BY s.subject, s.score DESC`,
+        [info.classId, targetDate]
+    );
     res.json(scores);
 });
 
-// 获取班级分数概况
-router.get('/general',isTeacher,async(req,res)=>{
-    const examDate = req.query.exam_date;
-    const account = req.session.account;
-    const [rows] = await pool.query('select id from users where account = ?',[account]);
-    const userId = rows[0].id;
-    // 获取班级ID
-    const [classRows] = await pool.query('SELECT id FROM classes WHERE teacher_id = ?', [userId]);
-    if (classRows.length === 0) return res.json({ max: 0, min: 0, avg: 0 });
-    const classId = classRows[0].id;
-    let targetDate = examDate;
-    if (!targetDate) {
-        const [dateRow] = await pool.query(`SELECT MAX(exam_date) AS latest FROM scores WHERE class_id = ?`, [classId]);
-        targetDate = dateRow[0].latest;
-        if (!targetDate) return res.json({ max: 0, min: 0, avg: 0 });
-    }
-    // 在该批次下计算总分概况
-    const [scores] = await pool.query(`
-        WITH stu_total AS (
-            SELECT student_id, SUM(score) AS total
-            FROM scores
-            WHERE class_id = ? AND exam_date = ?
-            GROUP BY student_id
-        )
-        SELECT 
-            MAX(total) AS max,
-            MIN(total) AS min,
-            ROUND(AVG(total), 1) AS avg
-        FROM stu_total
-    `, [classId, targetDate]);
-    res.json(scores[0]);
-});
+// 获取班级分数概况（总分 max/min/avg）
+router.get('/general', async (req, res) => {
+    const info = await getTeacherInfo(req.session.account);
+    if (!info || !info.classId) return res.json({ max: 0, min: 0, avg: 0 });
+    const targetDate = await resolveExamDate(info.classId, req.query.exam_date);
+    if (!targetDate) return res.json({ max: 0, min: 0, avg: 0 });
 
-// 获取所有学生总分
-router.get('/totalscores',isTeacher,async(req,res)=>{
-    const examDate = req.query.exam_date;
-    const account = req.session.account;
-    const [rows] = await pool.query('select id from users where account = ?',[account]);
-    const userId = rows[0].id;
-    const [classRows] = await pool.query('SELECT id FROM classes WHERE teacher_id = ?', [userId]);
-    if (classRows.length === 0) return res.json([]);
-    const classId = classRows[0].id;
-    let targetDate = examDate;
-    if (!targetDate) {
-        const [dateRow] = await pool.query(`SELECT MAX(exam_date) AS latest FROM scores WHERE class_id = ?`, [classId]);
-        targetDate = dateRow[0].latest;
-        if (!targetDate) return res.json([]);
-    }
-    const [scores] = await pool.query(`
-        with stu_scores as (
-            select
-            s.student_id as id,
-            u.real_name as studentName,
-            sum(s.score) as total_score 
-            from scores s
-            join users u on s.student_id = u.id
-            where s.class_id = ? and s.exam_date = ?
-            group by s.student_id
-        )
-        select 
-            id,
-            studentName,
-            total_score,
-            rank() over (order by total_score desc) as class_rank
-        from stu_scores
-    `,[classId, targetDate]);
-    res.json(scores);
-});
-
-
-// 获取单科成绩概况
-router.get('/subjectgeneral',isTeacher,async(req,res)=>{
-    const examDate = req.query.exam_date;
-    const account = req.session.account;
-    const [rows] = await pool.query('select id from users where account = ?',[account]);
-    const userId = rows[0].id;
-    // 获取班级ID
-    const [classRows] = await pool.query('SELECT id FROM classes WHERE teacher_id = ?', [userId]);
-    if (classRows.length === 0) return res.json([]);
-    const classId = classRows[0].id;
-    let targetDate = examDate;
-    if (!targetDate) {
-        const [dateRow] = await pool.query(`SELECT MAX(exam_date) AS latest FROM scores WHERE class_id = ?`, [classId]);
-        targetDate = dateRow[0].latest;
-        if (!targetDate) return res.json([]);
-    }
-    // 在该批次下计算单科概况
-    const [scores] = await pool.query(`
-        SELECT 
-            subject,
-            MAX(score) AS max,
-            MIN(score) AS min,
-            ROUND(AVG(score), 1) AS avg,
-            COUNT(*) AS total_count,
-            COUNT(CASE WHEN score >= full_mark * 0.6 THEN 1 END) AS pass_count
+    const [rows] = await pool.query(
+        `WITH stu_total AS (
+        SELECT student_id, SUM(score) AS total
         FROM scores
         WHERE class_id = ? AND exam_date = ?
-        GROUP BY subject
-    `, [classId, targetDate]);
-    // 计算及格率
-    const result = scores.map(row => ({
+        GROUP BY student_id
+        )
+        SELECT MAX(total) AS max, MIN(total) AS min, ROUND(AVG(total), 1) AS avg
+        FROM stu_total`,
+        [info.classId, targetDate]
+    );
+    res.json(rows[0]);
+});
+
+// 获取所有学生总分及排名
+router.get('/totalscores', async (req, res) => {
+    const info = await getTeacherInfo(req.session.account);
+    if (!info || !info.classId) return res.json([]);
+    const targetDate = await resolveExamDate(info.classId, req.query.exam_date);
+    if (!targetDate) return res.json([]);
+
+    const [scores] = await pool.query(
+        `WITH stu_scores AS (
+        SELECT s.student_id AS id,
+                u.real_name AS studentName,
+                SUM(s.score) AS total_score
+        FROM scores s
+        JOIN users u ON s.student_id = u.id
+        WHERE s.class_id = ? AND s.exam_date = ?
+        GROUP BY s.student_id
+        )
+        SELECT id, studentName, total_score,
+                RANK() OVER (ORDER BY total_score DESC) AS class_rank
+        FROM stu_scores`,
+        [info.classId, targetDate]
+    );
+    res.json(scores);
+});
+
+// 获取单科成绩概况
+router.get('/subjectgeneral', async (req, res) => {
+    const info = await getTeacherInfo(req.session.account);
+    if (!info || !info.classId) return res.json([]);
+    const targetDate = await resolveExamDate(info.classId, req.query.exam_date);
+    if (!targetDate) return res.json([]);
+
+    const [rows] = await pool.query(
+        `SELECT subject,
+                MAX(score) AS max,
+                MIN(score) AS min,
+                ROUND(AVG(score), 1) AS avg,
+                COUNT(*) AS total_count,
+                COUNT(CASE WHEN score >= full_mark * 0.6 THEN 1 END) AS pass_count
+        FROM scores
+        WHERE class_id = ? AND exam_date = ?
+        GROUP BY subject`,
+        [info.classId, targetDate]
+    );
+    const result = rows.map(row => ({
         subject: row.subject,
         max: row.max,
         min: row.min,
@@ -202,363 +210,196 @@ router.get('/subjectgeneral',isTeacher,async(req,res)=>{
 });
 
 // 获取单科满分
-router.post('/fullmark',isTeacher,async(req,res)=>{
-    const subject = req.body.subject;
-    const [rows] = await pool.query('select full_mark from scores where subject = ? limit 1',[subject]);
+router.post('/fullmark', async (req, res) => {
+    const { subject } = req.body;
+    const [rows] = await pool.query('SELECT full_mark FROM scores WHERE subject = ? LIMIT 1', [subject]);
     res.json(rows[0]);
 });
 
-// 根据成绩ID修改
-router.put('/scores/:id',isTeacher,async(req,res)=>{
+// 根据成绩ID修改成绩
+router.put('/scores/:id', async (req, res) => {
     const scoreId = parseInt(req.params.id);
     const { newScore } = req.body;
-    
-    if (newScore === undefined) {
-        return res.status(400).json({ success: false, message: '缺少新成绩' });
-    }
+    if (newScore === undefined) return res.status(400).json({ success: false, message: '缺少新成绩' });
 
-    const account = req.session.account;
-    try {
-        // 获取教师所带班级
-        const [user] = await pool.query('SELECT id, real_name FROM users WHERE account = ?', [account]);
-        const userId = user[0].id;
-        const [classRows] = await pool.query('SELECT id FROM classes WHERE teacher_id = ?', [userId]);
-        if (classRows.length === 0) {
-            return res.status(403).json({ success: false, message: '您不是班主任，无权修改成绩' });
-        }
-        const classId = classRows[0].id;
+    const info = await getTeacherInfo(req.session.account);
+    if (!info) return res.status(400).json({ success: false, message: '用户不存在' });
+    const { userId, realName, classId } = info;
+    if (!classId) return res.status(403).json({ success: false, message: '您不是班主任，无权修改成绩' });
 
-        // 获取成绩记录并验证班级
-        const [scoreRows] = await pool.query(
-            `SELECT s.student_id, s.class_id, s.subject, s.score, s.full_mark, u.real_name AS studentName
-             FROM scores s
-             JOIN users u ON s.student_id = u.id
-             WHERE s.id = ?`,
-            [scoreId]
-        );
-        if (scoreRows.length === 0) {
-            return res.status(404).json({ success: false, message: '成绩记录不存在' });
-        }
-        const record = scoreRows[0];
-        if (record.class_id !== classId) {
-            return res.status(403).json({ success: false, message: '只能修改本班学生的成绩' });
-        }
-        if (record.subject === '总分') {
-            return res.status(400).json({ success: false, message: '总分由系统自动计算，不可手动修改' });
-        }
-        if (newScore < 0 || newScore > record.full_mark) {
-            return res.status(400).json({ success: false, message: `成绩必须在 0-${record.full_mark} 之间` });
-        }
+    const [scoreRows] = await pool.query(
+        `SELECT s.student_id, s.class_id, s.subject, s.score, s.full_mark, u.real_name AS studentName
+        FROM scores s
+        JOIN users u ON s.student_id = u.id
+        WHERE s.id = ?`,
+        [scoreId]
+    );
+    if (scoreRows.length === 0) return res.status(404).json({ success: false, message: '成绩记录不存在' });
 
-        // 执行更新
-        await pool.query('UPDATE scores SET score = ? WHERE id = ?', [newScore, scoreId]);
+    const record = scoreRows[0];
+    if (record.class_id !== classId) return res.status(403).json({ success: false, message: '只能修改本班学生的成绩' });
+    if (record.subject === '总分') return res.status(400).json({ success: false, message: '总分由系统自动计算，不可手动修改' });
+    if (newScore < 0 || newScore > record.full_mark)
+        return res.status(400).json({ success: false, message: `成绩必须在 0-${record.full_mark} 之间` });
 
-        // 记录日志
-        await addLog(
-            userId,
-            user[0].real_name,
-            'teacher',
-            '成绩修改',
-            `修改学生 ${record.studentName} 的 ${record.subject} 成绩从 ${record.score} 改为 ${newScore}`,
-            classId
-        );
-
-        res.json({ success: true, message: '修改成功' });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ success: false, message: '服务器错误' });
-    }
+    await pool.query('UPDATE scores SET score = ? WHERE id = ?', [newScore, scoreId]);
+    await addLog(
+        userId,
+        realName,
+        'teacher',
+        '成绩修改',
+        `修改学生 ${record.studentName} 的 ${record.subject} 成绩从 ${record.score} 改为 ${newScore}`,
+        classId
+    );
+    res.json({ success: true, message: '修改成功' });
 });
 
-// 获取通知
-router.get('/notices',isTeacher,async(req,res)=>{
-    const account = req.session.account;
-    const [rows] = await pool.query('select id,identity,real_name from users where account = ?',[account]);
-    const { id:userId, identity, real_name:teacher_name } = rows[0];
-    const [cid] = await pool.query('SELECT id FROM classes WHERE teacher_id = ?', [userId]);
-    const classId = cid[0].id;
-    if (identity !== 'teacher') {
-        return res.status(403).json({ success: false,message: '无权限获取通知' });
-    }
-    const sql = `
-        SELECT 
-            n.id,
-            n.title,
-            n.content,
-            n.publish_time,
-            (
-                SELECT COUNT(*)
-                FROM notice_read_status rs
-                WHERE rs.notice_id = n.id AND rs.is_read = 1
-            ) AS read_count,
-            (
-                SELECT COUNT(*)
-                FROM class_members cm
-                WHERE cm.class_id = n.class_id AND cm.status = 1
-            ) AS total_students
+// 获取通知（含已读/未读统计）
+router.get('/notices', async (req, res) => {
+    const info = await getTeacherInfo(req.session.account);
+    if (!info || info.identity !== 'teacher') return res.status(403).json({ success: false, message: '无权限获取通知' });
+    if (!info.classId) return res.json([]);
+
+    const [rows] = await pool.query(
+        `SELECT n.id, n.title, n.content, n.publish_time,
+                (SELECT COUNT(*) FROM notice_read_status rs WHERE rs.notice_id = n.id AND rs.is_read = 1) AS read_count,
+                (SELECT COUNT(*) FROM class_members cm WHERE cm.class_id = n.class_id AND cm.status = 1) AS total_students
         FROM notices n
         WHERE n.class_id = ? AND n.is_deleted = 0
-        ORDER BY n.publish_time DESC
-    `;
-    try {
-        const [rows] = await pool.query(sql, [classId]);
-        // 计算未读人数 = 总人数 - 已读人数
-        const notices = rows.map(row => ({
-            id: row.id,
-            title: row.title,
-            content: row.content,
-            publishTime: row.publish_time,
-            teacher_name: teacher_name,
-            readCount: row.read_count,
-            totalStudents: row.total_students,
-            unreadCount: row.total_students - row.read_count
-        }));
-        res.json(notices);
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ success: false,message: '数据库错误' });
-    }
+        ORDER BY n.publish_time DESC`,
+        [info.classId]
+    );
+    const notices = rows.map(row => ({
+        id: row.id,
+        title: row.title,
+        content: row.content,
+        publishTime: row.publish_time,
+        teacher_name: info.realName,
+        readCount: row.read_count,
+        totalStudents: row.total_students,
+        unreadCount: row.total_students - row.read_count
+    }));
+    res.json(notices);
 });
 
 // 新增通知
-router.post('/notices',isTeacher,async(req,res)=>{
-    const account = req.session.account;
-    const [rows] = await pool.query('select id,real_name,identity from users where account = ?',[account]);
-    // 教师信息
-    const {id: userId, real_name: user_name, identity} = rows[0];
-    const [cid] = await pool.query('SELECT id FROM classes WHERE teacher_id = ?', [userId]);
-    const classId = cid[0].id;
-    if (identity !== 'teacher') {
-        return res.status(403).json({ success: false,message: '无权限发布通知' });
-    }
+router.post('/notices', async (req, res) => {
+    const info = await getTeacherInfo(req.session.account);
+    if (!info || info.identity !== 'teacher') return res.status(403).json({ success: false, message: '无权限发布通知' });
+    if (!info.classId) return res.status(403).json({ success: false, message: '未分配班级，无法发布通知' });
+
     const { title, content } = req.body;
-    if (!title || !content) {
-        return res.status(400).json({ success: false,message: '标题和内容不能为空' });
-    }
-    const publishTime = new Date();
-    const sql = `
-        INSERT INTO notices (class_id, publisher_id, title, content, is_deleted)
-        VALUES (?, ?, ?, ?, 0)
-    `;
-    const params = [classId, userId, title, content];
-    try {
-        const [result] = await pool.query(sql, params);
-        const newNotice = {
-            id: result.insertId,
-            class_id: classId,
-            publisher_id: userId,
-            title,
-            content,
-            publish_time: publishTime,
-            is_deleted: 0
-        };
-        await addLog(
-            userId,
-            user_name,
-            identity,
-            "通知发布",
-            `发布通知：${title}`,
-            classId
-        );
-        // 独立于通知发布
-        try {
-            const [students] = await pool.query(
-                'SELECT student_id FROM class_members WHERE class_id = ? AND status = 1',
-                [classId]
-            );
-            const [admins] = await pool.query(`
-                select id from users where identity = 'admin'
-            `);
-            const sendToUser = req.app.locals.sendToUser;
-            students.forEach(s => {
-                sendToUser(s.student_id, {
-                    type: 'NEW_NOTICE',
-                    data: {
-                        noticeId: result.insertId,
-                        title: title
-                    }
-                });
-            });
-            admins.forEach(a => {
-                sendToUser(a.id, {
-                    type: 'NEW_NOTICE',
-                    data: {
-                        noticeId: result.insertId,
-                        title: title
-                    }
-                })
-            });
-        } catch (pushErr) {
-            // 推送失败不影响主流程，仅记录日志
-            console.error('WebSocket 推送失败:', pushErr);
-        }
-        res.json(newNotice);
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ success: false,message: '数据库错误' });
-    }
+    if (!title || !content) return res.status(400).json({ success: false, message: '标题和内容不能为空' });
+
+    const [result] = await pool.query(
+        'INSERT INTO notices (class_id, publisher_id, title, content, is_deleted) VALUES (?, ?, ?, ?, 0)',
+        [info.classId, info.userId, title, content]
+    );
+    const newNotice = {
+        id: result.insertId,
+        class_id: info.classId,
+        publisher_id: info.userId,
+        title,
+        content,
+        publish_time: new Date(),
+        is_deleted: 0
+    };
+    await addLog(info.userId, info.realName, info.identity, '通知发布', `发布通知：${title}`, info.classId);
+    // 推送通知（独立处理，不影响主流程）
+    pushNewNotice(result.insertId, title, info.classId, req.app.locals.sendToUser);
+    res.json(newNotice);
 });
 
 // 编辑通知
-router.put('/notices/:id',isTeacher,async(req,res)=>{
-    // 拿 id, 真名, 所属班级
-    const account = req.session.account;
-    const [rows] = await pool.query('select id,real_name,identity from users where account = ?',[account]);
-    // 教师信息
-    const {id: userId, real_name: user_name, identity} = rows[0];
-    const [cid] = await pool.query('SELECT id FROM classes WHERE teacher_id = ?', [userId]);
-    const classId = cid[0].id;
-    if (identity !== 'teacher') {
-        return res.status(403).json({ success: false,message: '无权限编辑通知' });
-    }
+router.put('/notices/:id', async (req, res) => {
+    const info = await getTeacherInfo(req.session.account);
+    if (!info || info.identity !== 'teacher') return res.status(403).json({ success: false, message: '无权限编辑通知' });
+    if (!info.classId) return res.status(403).json({ success: false, message: '未分配班级' });
+
     const { title, content } = req.body;
-    if (!title || !content) {
-        return res.status(400).json({ success: false, message: '标题和内容不能为空' });
-    }
-    if (title.length > 100) {
-        return res.status(400).json({ success: false, message: '标题不能超过100个字符' });
-    }
-    // 拿通知id
+    if (!title || !content) return res.status(400).json({ success: false, message: '标题和内容不能为空' });
+    if (title.length > 100) return res.status(400).json({ success: false, message: '标题不能超过100个字符' });
+
     const noticeId = parseInt(req.params.id);
-    // 检查当前班级里是否存在该通知
-    const [_rows] = await pool.query('select class_id from notices where id = ? and is_deleted = 0',[noticeId]);
-    if (_rows.length === 0) {
-        return res.status(404).json({ success: false, message: '通知不存在或已被删除' });
-    }
-    if (_rows[0].class_id !== classId) {
-        return res.status(403).json({ success: false, message: '您只能修改自己班级的通知' });
-    }
-    // 更新
-    await pool.query('update notices set title = ?, content = ? where id = ?',[title,content,noticeId]);
-    await addLog(
-        userId,
-        user_name,
-        identity,
-        "通知编辑",
-        `编辑通知：${title}`,
-        classId
-    );
+    const notice = await getNoticeForTeacher(noticeId, info.classId);
+    if (!notice) return res.status(404).json({ success: false, message: '通知不存在或不属于您的班级' });
+
+    await pool.query('UPDATE notices SET title = ?, content = ? WHERE id = ?', [title, content, noticeId]);
+    await addLog(info.userId, info.realName, info.identity, '通知编辑', `编辑通知：${title}`, info.classId);
     res.json({ success: true, message: '通知修改成功' });
 });
 
-// 删除通知
-router.delete('/notices/:id',isTeacher,async(req,res)=>{
-    // 拿 id, 真名, 所属班级
-    const account = req.session.account;
-    const [rows] = await pool.query('select id,real_name,identity from users where account = ?',[account]);
-    const {id: userId, real_name: user_name, identity} = rows[0];
-    const [cid] = await pool.query('SELECT id FROM classes WHERE teacher_id = ?', [userId]);
-    const classId = cid[0].id;
-    if (identity !== 'teacher') {
-        return res.status(403).json({ success: false,message: '无权限编辑通知' });
-    }
-    // 拿通知id
+// 删除通知（软删除）
+router.delete('/notices/:id', async (req, res) => {
+    const info = await getTeacherInfo(req.session.account);
+    if (!info || info.identity !== 'teacher') return res.status(403).json({ success: false, message: '无权限删除通知' });
+    if (!info.classId) return res.status(403).json({ success: false, message: '未分配班级' });
+
     const noticeId = parseInt(req.params.id);
-    // 检查当前班级里是否存在该通知
-    const [_rows] = await pool.query('select class_id,title from notices where id = ? and is_deleted = 0',[noticeId]);
-    if (_rows.length === 0) {
-        return res.status(404).json({ success: false, message: '通知不存在或已被删除' });
-    }
-    if (_rows[0].class_id !== classId) {
-        return res.status(403).json({ success: false, message: '您只能删除自己班级的通知' });
-    }
-    // 拿标题
-    const deletedTitle = _rows[0].title;
-    // 软删除
-    await pool.query('update notices set is_deleted = 1 where id = ?',[noticeId]);
-    await addLog(
-        userId,
-        user_name,
-        identity,
-        "通知删除",
-        `删除通知：${deletedTitle}`,
-        classId
-    );
+    const notice = await getNoticeForTeacher(noticeId, info.classId);
+    if (!notice) return res.status(404).json({ success: false, message: '通知不存在或不属于您的班级' });
+
+    await pool.query('UPDATE notices SET is_deleted = 1 WHERE id = ?', [noticeId]);
+    await addLog(info.userId, info.realName, info.identity, '通知删除', `删除通知：${notice.title}`, info.classId);
     res.json({ success: true, message: '通知已删除' });
 });
 
-// 获取日志 (采用分页传参分别处理)
-router.get('/logs',isTeacher,async(req,res)=>{
-    const account = req.session.account;
-    const [rows] = await pool.query('select id,identity from users where account = ?',[account]);
-    const {id: userId, real_name: user_name, identity} = rows[0];
-    const [cid] = await pool.query('SELECT id FROM classes WHERE teacher_id = ?', [userId]);
-    const classId = cid[0].id;
-    if (identity !== 'teacher') {
-        return res.status(403).json({ success: false,message: '无权限编辑通知' });
-    }
-    // 当前页数
-    let page = parseInt(req.query.page) || 1;
-    // 每页 15 条
-    let pageSize = parseInt(req.query.pageSize) || 15;
-    // 跳过多少条（分页渲染）
-    const offset = (page - 1)*pageSize;
-    // 查总数
-    const [countRows] = await pool.query(`
-        select count(*) as total from operation_logs where target_class_id = ?
-    `,[classId]);
+// 获取操作日志（分页）
+router.get('/logs', async (req, res) => {
+    const info = await getTeacherInfo(req.session.account);
+    if (!info || info.identity !== 'teacher') return res.status(403).json({ success: false, message: '无权限查看日志' });
+    if (!info.classId) return res.json({ logs: [], total: 0, page: 1, pageSize: 15 });
+
+    const page = parseInt(req.query.page) || 1;
+    const pageSize = parseInt(req.query.pageSize) || 15;
+    const offset = (page - 1) * pageSize;
+
+    const [countRows] = await pool.query(
+        'SELECT COUNT(*) AS total FROM operation_logs WHERE target_class_id = ?',
+        [info.classId]
+    );
     const total = countRows[0].total;
-    // 查本页
-    const [logs] = await pool.query(`
-        select user_name, operation_type, operation_content, created_at
-        from operation_logs 
-        where target_class_id = ?
-        order by created_at desc
-        limit ? offset ?
-    `,[classId, pageSize, offset]);
-    res.json({
-        logs: logs,
-        total: total,
-        page: page,
-        pageSize: pageSize
-    });
+
+    const [logs] = await pool.query(
+        `SELECT user_name, operation_type, operation_content, created_at
+        FROM operation_logs
+        WHERE target_class_id = ?
+        ORDER BY created_at DESC
+        LIMIT ? OFFSET ?`,
+        [info.classId, pageSize, offset]
+    );
+    res.json({ logs, total, page, pageSize });
 });
 
-// 获取当前日志的学生状态
-router.get('/notices/:id/read-status',isTeacher,async(req,res)=>{
-    const account = req.session.account;
-    const [rows] = await pool.query('select id,identity from users where account = ?',[account]);
-    const {id: userId, real_name: user_name, identity} = rows[0];
-    const [cid] = await pool.query('SELECT id FROM classes WHERE teacher_id = ?', [userId]);
-    const classId = cid[0].id;
-    if (identity !== 'teacher') {
-        return res.status(403).json({ success: false,message: '无权限获取通知' });
-    }
-    // 拿通知id
+// 获取某条通知的详细已读/未读名单
+router.get('/notices/:id/read-status', async (req, res) => {
+    const info = await getTeacherInfo(req.session.account);
+    if (!info || info.identity !== 'teacher') return res.status(403).json({ success: false, message: '无权限获取通知' });
+    if (!info.classId) return res.status(403).json({ success: false, message: '未分配班级' });
+
     const noticeId = parseInt(req.params.id);
-    // 检查当前班级里是否存在该通知
-    const [_rows] = await pool.query('select class_id,title from notices where id = ? and is_deleted = 0',[noticeId]);
-    if (_rows.length === 0) {
-        return res.status(404).json({ success: false, message: '通知不存在或已被删除' });
-    }
-    if (_rows[0].class_id !== classId) {
-        return res.status(403).json({ success: false, message: '您只能获取自己班级的通知' });
-    }
+    const notice = await getNoticeForTeacher(noticeId, info.classId);
+    if (!notice) return res.status(404).json({ success: false, message: '通知不存在或不属于您的班级' });
 
     // 查询班级所有在读学生
-    const [students] = await pool.query(`
-        select id,real_name from users
-        where id in (select student_id from class_members where class_id = ?
-        and status = 1)
-        and identity = 'student'
-    `,[classId]);
-
-    // 获取当前通知已读学生信息
-    const [readRecords] = await pool.query(`
-        select student_id 
-        from notice_read_status 
-        where notice_id = ? and is_read = 1
-    `,[noticeId]);
-    // 集合，搜索速度快
-    // 返回一个只含 id 的数组
+    const [students] = await pool.query(
+        `SELECT id, real_name FROM users
+        WHERE id IN (SELECT student_id FROM class_members WHERE class_id = ? AND status = 1)
+        AND identity = 'student'`,
+        [info.classId]
+    );
+    // 已读学生集合
+    const [readRecords] = await pool.query(
+        'SELECT student_id FROM notice_read_status WHERE notice_id = ? AND is_read = 1',
+        [noticeId]
+    );
     const readSet = new Set(readRecords.map(r => r.student_id));
-    // 分为两组
-    // 以 id 分割，但只保留姓名
     const readList = students.filter(s => readSet.has(s.id)).map(s => s.real_name);
     const unreadList = students.filter(s => !readSet.has(s.id)).map(s => s.real_name);
+
     res.json({
-        readList: readList,
-        unreadList: unreadList,
+        readList,
+        unreadList,
         totalStudents: students.length,
         readCount: readList.length,
         unreadCount: unreadList.length
