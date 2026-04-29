@@ -51,7 +51,9 @@ export const TeacherRender = {
                         <td>${escapeHtml(item.id)}</td>
                         <td>${item.total_score}</td>
                         <td>${item.class_rank}</td>
-                        <td>—</td>
+                        <td>
+                            <button class="btn-sm comment-btn" data-student-id="${item.id}" data-student-name="${escapeHtml(item.studentName)}">评语</button>
+                        </td>
                     </tr>
                 `;
             } else {
@@ -63,6 +65,7 @@ export const TeacherRender = {
                         <td>${item.class_subject_rank}</td>
                         <td>
                             <button class="btn-sm edit-score-btn" data-id="${item.scoreId}" data-subject="${item.subject}" data-score="${item.score}">编辑</button>
+                            <button class="btn-sm comment-btn" data-student-id="${item.id}" data-student-name="${escapeHtml(item.studentName)}">评语</button>
                         </td>
                     </tr>
                 `;

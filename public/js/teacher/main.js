@@ -472,6 +472,49 @@ function bindGlobalEvents() {
             document.getElementById('editScore').value = score;
             document.getElementById('editScoreModal').style.display = 'flex';
         }
+        // 评语生成按钮
+        if (e.target.classList.contains('comment-btn')) {
+            const studentId = e.target.dataset.studentId;
+            const studentName = e.target.dataset.studentName || '';
+            const currentExam = TeacherState.currentExamDate; // 当前选中的考试批次
+
+            // 风格选择（可硬编码或小型弹窗）
+            const style = await new Promise(resolve => {
+                Modal.custom({
+                    title: `为 ${studentName} 生成评语`,
+                    content: `
+                        <label><input type="radio" name="commentStyle" value="formal" checked> 正式严谨</label><br>
+                        <label><input type="radio" name="commentStyle" value="encouraging"> 鼓励温暖</label>
+                    `,
+                    buttons: [
+                        { text: '取消', onClick: (modal) => { modal.close(); resolve(null); } },
+                        { text: '生成', type: 'primary', onClick: (modal) => {
+                            const checked = modal.modal.querySelector('input[name="commentStyle"]:checked');
+                            resolve(checked ? checked.value : 'formal');
+                            modal.close();
+                        }}
+                    ]
+                });
+            });
+
+            if (!style) return;
+
+            // 显示加载状态
+            const oldText = e.target.textContent;
+            e.target.disabled = true;
+            e.target.textContent = '生成中...';
+
+            try {
+                const res = await API.teacher.getComment(studentId, currentExam, style);
+                // 展示结果
+                Modal.alert(res.comment, `${studentName} 的评语`);
+            } catch (err) {
+                Modal.alert(err.message || '生成失败');
+            } finally {
+                e.target.disabled = false;
+                e.target.textContent = oldText;
+            }
+        }
     });
 
     // 关闭已读名单模态框

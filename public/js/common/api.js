@@ -148,6 +148,11 @@ const API = {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ subject })
         }),
+        getComment: (studentId, examDate = '', style = 'formal') => API.request('/teacher/comment', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ studentId, examDate, style })
+        }),
     },
 
     // 学生端
