@@ -476,9 +476,10 @@ function bindGlobalEvents() {
         if (e.target.classList.contains('comment-btn')) {
             const studentId = e.target.dataset.studentId;
             const studentName = e.target.dataset.studentName || '';
-            const currentExam = TeacherState.currentExamDate; // 当前选中的考试批次
+            const subject = e.target.dataset.subject || ''; // 单科时有值，总分时为空
+            const currentExam = TeacherState.currentExamDate;
 
-            // 风格选择（可硬编码或小型弹窗）
+            // 风格选择弹窗
             const style = await new Promise(resolve => {
                 Modal.custom({
                     title: `为 ${studentName} 生成评语`,
@@ -496,17 +497,14 @@ function bindGlobalEvents() {
                     ]
                 });
             });
-
             if (!style) return;
 
-            // 显示加载状态
             const oldText = e.target.textContent;
             e.target.disabled = true;
             e.target.textContent = '生成中...';
 
             try {
-                const res = await API.teacher.getComment(studentId, currentExam, style);
-                // 展示结果
+                const res = await API.teacher.getComment(studentId, currentExam, style, subject);
                 Modal.alert(res.comment, `${studentName} 的评语`);
             } catch (err) {
                 Modal.alert(err.message || '生成失败');

@@ -411,15 +411,14 @@ router.post('/comment', async (req, res) => {
     if (!info || !info.classId) {
         return res.status(403).json({ success: false, message: '未分配班级' });
     }
-    const { studentId, examDate, style = 'formal' } = req.body;
+    const { studentId, examDate, style = 'formal', subject = '' } = req.body;
     if (!studentId) {
         return res.status(400).json({ success: false, message: '缺少学生ID' });
     }
 
-    // 解析考试日期（默认最近一次）
     const targetDate = await resolveExamDate(info.classId, examDate);
     if (!targetDate) {
-        return res.json({ comment: '该班级暂无考试成绩，无法生成评语' });
+        return res.json({ comment: '该班级暂无考试成绩' });
     }
 
     // 获取学生姓名
@@ -432,30 +431,6 @@ router.post('/comment', async (req, res) => {
     }
     const studentName = stuRows[0].real_name;
 
-    // 查询该生本次考试各科成绩及班级平均分
-    const [scores] = await pool.query(`
-        SELECT s.subject, s.score, s.full_mark,
-               ROUND(AVG(s2.score), 1) AS class_avg,
-               RANK() OVER (PARTITION BY s.subject ORDER BY s.score DESC) AS class_rank
-        FROM scores s
-        LEFT JOIN scores s2 ON s2.class_id = s.class_id 
-            AND s2.subject = s.subject 
-            AND s2.exam_date = s.exam_date
-        WHERE s.student_id = ? AND s.class_id = ? AND s.exam_date = ?
-        GROUP BY s.subject, s.score, s.full_mark
-        ORDER BY s.subject
-    `, [studentId, info.classId, targetDate]);
-
-    // 查询总分及总分排名
-    const [totalRow] = await pool.query(`
-        SELECT SUM(score) AS total_score,
-               RANK() OVER (ORDER BY SUM(score) DESC) AS total_rank
-        FROM scores
-        WHERE class_id = ? AND exam_date = ?
-        GROUP BY student_id
-        HAVING student_id = ?
-    `, [info.classId, targetDate, studentId]);
-
     // 查询班级总人数
     const [countRow] = await pool.query(
         'SELECT COUNT(DISTINCT student_id) AS total FROM scores WHERE class_id = ? AND exam_date = ?',
@@ -463,33 +438,100 @@ router.post('/comment', async (req, res) => {
     );
     const totalStudents = countRow[0]?.total || 0;
 
+    let scores, totalInfo = '';
+    const isSingleSubject = !!subject;
+    const { classId } = info;
+
+    if (isSingleSubject) {
+        // 单科查询
+        const [rows] = await pool.query(`
+            SELECT s.subject, s.score, s.full_mark,
+                    ROUND(
+                        (SELECT AVG(s2.score) 
+                        FROM scores s2 
+                        WHERE s2.class_id = ? AND s2.subject = ? AND s2.exam_date = ?),
+                        1
+                    ) AS class_avg,
+                    (SELECT COUNT(*) + 1 
+                    FROM scores s3 
+                    WHERE s3.class_id = ? AND s3.subject = ? AND s3.exam_date = ? 
+                        AND s3.score > s.score) AS class_rank
+            FROM scores s
+            WHERE s.student_id = ? AND s.class_id = ? AND s.subject = ? AND s.exam_date = ?
+        `, [classId, subject, targetDate,
+            classId, subject, targetDate,
+            studentId, classId, subject, targetDate]);
+        scores = rows;
+    } else {
+        // 全科查询
+        const [rows] = await pool.query(`
+            SELECT s.subject, s.score, s.full_mark,
+                    ROUND(
+                        (SELECT AVG(s2.score) 
+                        FROM scores s2 
+                        WHERE s2.class_id = ? AND s2.subject = s.subject AND s2.exam_date = ?),
+                        1
+                    ) AS class_avg,
+                    (SELECT COUNT(*) + 1 
+                    FROM scores s3 
+                    WHERE s3.class_id = ? AND s3.subject = s.subject AND s3.exam_date = ? 
+                        AND s3.score > s.score) AS class_rank
+            FROM scores s
+            WHERE s.student_id = ? AND s.class_id = ? AND s.exam_date = ?
+            ORDER BY s.subject
+        `, [classId, targetDate,
+            classId, targetDate,
+            studentId, classId, targetDate]);
+        scores = rows;
+
+        // 总分 + 总分排名（子查询）
+        const [totalRow] = await pool.query(`
+            SELECT total_score,
+                    (SELECT COUNT(*) + 1 
+                    FROM (
+                        SELECT SUM(score) AS total_score 
+                        FROM scores 
+                        WHERE class_id = ? AND exam_date = ? 
+                        GROUP BY student_id
+                    ) AS t 
+                    WHERE t.total_score > main.total_score) AS total_rank
+            FROM (
+                SELECT SUM(score) AS total_score 
+                FROM scores 
+                WHERE student_id = ? AND class_id = ? AND exam_date = ?
+            ) AS main
+        `, [classId, targetDate,
+            studentId, classId, targetDate]);
+        if (totalRow.length > 0) {
+            totalInfo = `\n总分：${totalRow[0].total_score}，班级排名第${totalRow[0].total_rank}/${totalStudents}`;
+        }
+    }
+
     if (scores.length === 0) {
-        return res.json({ comment: '该生本次考试无成绩记录' });
+        return res.json({ comment: isSingleSubject ? `该生本次${subject}无成绩记录` : '该生本次考试无成绩记录' });
     }
 
     // 构建 Prompt
-    const styleDesc = style === 'encouraging' 
-        ? '请使用温暖、鼓励的语气，多以肯定为主，委婉指出不足。' 
-        : '请使用正式、客观的语气，适合写入成绩单。';
-    
-    let prompt = `你是一位经验丰富的班主任。请根据以下学生成绩生成一段约120字的学期评语。\n`;
-    prompt += `学生：${studentName}，考试日期：${targetDate}\n`;
-    prompt += `班级人数：${totalStudents}，各科成绩如下：\n`;
-    scores.forEach(r => {
-        prompt += `${r.subject}：${r.score}/${r.full_mark}，班级平均${r.class_avg}，排名第${r.class_rank}\n`;
-    });
-    if (totalRow.length > 0) {
-        prompt += `总分：${totalRow[0].total_score}，总分班级排名第${totalRow[0].total_rank}/${totalStudents}\n`;
-    }
-    prompt += `${styleDesc}\n`;
-    prompt += `要求：必须基于上述成绩数据，不涉及学习态度、课堂表现等未给出的信息；\n`;
-    prompt += `直接输出评语文本，不要包含任何前缀或解释。`;
+    const styleDesc = style === 'encouraging'
+        ? '语气温暖、鼓励，多以肯定为主，委婉指出不足。'
+        : '语气正式、客观，适合写入成绩单。';
 
-    // 调用大模型
+    let prompt = `你是班主任，根据以下成绩生成约120字评语。\n学生：${studentName}，考试：${targetDate}\n`;
+    if (isSingleSubject) {
+        const r = scores[0];
+        prompt += `科目：${r.subject}，成绩：${r.score}/${r.full_mark}，班均：${r.class_avg}，排名：${r.class_rank}\n`;
+    } else {
+        prompt += `班级人数：${totalStudents}\n`;
+        scores.forEach(r => {
+            prompt += `${r.subject}：${r.score}/${r.full_mark}，班均：${r.class_avg}，排名：${r.class_rank}\n`;
+        });
+        prompt += totalInfo + '\n';
+    }
+    prompt += `${styleDesc}\n要求：只依据上述数据，不推测态度或缺漏；直接输出评语文本。`;
+
     const apiKey = process.env.AI_API_KEY;
     const apiEndpoint = process.env.AI_API_ENDPOINT;
     const model = process.env.AI_MODEL;
-
     if (!apiKey || !apiEndpoint || !model) {
         return res.status(500).json({ success: false, message: 'AI 服务未配置' });
     }
@@ -502,32 +544,25 @@ router.post('/comment', async (req, res) => {
                 'Authorization': `Bearer ${apiKey}`
             },
             body: JSON.stringify({
-                model: model,
+                model,
                 messages: [
-                    { role: 'system', content: '你是一名专业班主任，擅长写学生评语。' },
+                    { role: 'system', content: '你是一个专业班主任。' },
                     { role: 'user', content: prompt }
                 ],
                 max_tokens: 300,
                 temperature: 0.7
             })
         });
-
-        if (!aiRes.ok) {
-            const errText = await aiRes.text();
-            console.error('AI 评语生成失败:', errText);
-            return res.status(502).json({ success: false, message: 'AI 服务暂时不可用' });
-        }
-
+        if (!aiRes.ok) throw new Error('AI 服务异常');
         const aiData = await aiRes.json();
         const comment = aiData.choices[0].message.content.trim();
 
-        // 记录日志
-        await addLog(info.userId, info.realName, 'teacher', 'AI评语', `为 ${studentName} 生成评语`, info.classId);
-
+        await addLog(info.userId, info.realName, 'teacher', 'AI评语', 
+                     `为 ${studentName} 生成${isSingleSubject ? subject : '全科'}评语`, info.classId);
         res.json({ comment });
     } catch (err) {
-        console.error('AI 评语异常:', err);
-        res.status(500).json({ success: false, message: '评语生成失败' });
+        console.error(err);
+        res.status(502).json({ success: false, message: '评语生成失败' });
     }
 });
 

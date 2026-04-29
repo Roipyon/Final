@@ -148,10 +148,10 @@ const API = {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ subject })
         }),
-        getComment: (studentId, examDate = '', style = 'formal') => API.request('/teacher/comment', {
+        getComment: (studentId, examDate = '', style = 'formal', subject = '') => API.request('/teacher/comment', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ studentId, examDate, style })
+            body: JSON.stringify({ studentId, examDate, style, subject })
         }),
     },
 
