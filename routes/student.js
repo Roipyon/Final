@@ -217,21 +217,24 @@ router.get('/trend', async (req, res) => {
     const info = await getStudentInfo(req.session.account);
     if (!info || !info.classId) return res.json([]);
 
-    const [rows] = await pool.query(
-        `SELECT DATE_FORMAT(s.exam_date, '%Y-%m-%d') AS exam_date,
+    const [rows] = await pool.query(`
+        SELECT * FROM (
+            SELECT DATE_FORMAT(s.exam_date, '%Y-%m-%d') AS exam_date,
                 s.score,
                 s.full_mark,
                 ROUND(
-                (SELECT AVG(s2.score) 
-                FROM scores s2 
-                WHERE s2.class_id = ? AND s2.subject = ? AND s2.exam_date = s.exam_date), 
-                1
+                    (SELECT AVG(s2.score) 
+                        FROM scores s2 
+                        WHERE s2.class_id = ? AND s2.subject = ? AND s2.exam_date = s.exam_date), 
+                    1
                 ) AS class_avg
-        FROM scores s
-        WHERE s.student_id = ? AND s.subject = ?
-        ORDER BY s.exam_date ASC`,
-        [info.classId, subject, info.userId, subject]
-    );
+            FROM scores s
+            WHERE s.student_id = ? AND s.subject = ?
+            ORDER BY s.exam_date DESC
+            LIMIT 5
+        ) AS t 
+        ORDER BY exam_date ASC
+    `, [info.classId, subject, info.userId, subject]);
     res.json(rows);
 });
 
@@ -249,19 +252,22 @@ router.get('/diagnosis', async (req, res) => {
         params.push(subject);
     }
 
-    const [allScores] = await pool.query(
-        `SELECT s.exam_date, s.subject, s.score, s.full_mark,
+    const [allScores] = await pool.query(`
+        SELECT * FROM (
+            SELECT s.exam_date, s.subject, s.score, s.full_mark,
                 ROUND(
-                (SELECT AVG(s2.score) 
-                FROM scores s2 
-                WHERE s2.class_id = ? AND s2.subject = s.subject AND s2.exam_date = s.exam_date), 
-                1
+                    (SELECT AVG(s2.score) 
+                        FROM scores s2 
+                        WHERE s2.class_id = ? AND s2.subject = s.subject AND s2.exam_date = s.exam_date), 
+                    1
                 ) AS class_avg
-        FROM scores s
-        WHERE s.student_id = ? ${subjectCondition}
-        ORDER BY s.exam_date ASC, s.subject`,
-        params
-    );
+            FROM scores s
+            WHERE s.student_id = ? ${subjectCondition}
+            ORDER BY s.exam_date DESC
+            LIMIT 5
+        ) AS recent 
+        ORDER BY exam_date ASC, subject
+    `, params);
 
     if (allScores.length === 0) {
         return res.json({ diagnosis: '暂无考试成绩记录，无法生成诊断' });
@@ -292,12 +298,12 @@ router.get('/diagnosis', async (req, res) => {
     }
     prompt += `\n请直接输出诊断报告文本，不要包含任何额外解释或标记。\n请再次审查输出的内容是否严格遵循给定的要求。`;
 
-    //   const apiKey = process.env.AI_API_KEY;
-    //   const apiEndpoint = process.env.AI_API_ENDPOINT || 'https://openrouter.ai/api/v1/chat/completions';
-    //   const model = process.env.AI_MODEL || 'inclusionai/ling-2.6-flash:free';
-    const apiKey = '';
-    const apiEndpoint = '';
-    const model = '';
+      const apiKey = process.env.AI_API_KEY;
+      const apiEndpoint = process.env.AI_API_ENDPOINT || 'https://openrouter.ai/api/v1/chat/completions';
+      const model = process.env.AI_MODEL || 'inclusionai/ling-2.6-1t:free';
+    // const apiKey = '';
+    // const apiEndpoint = '';
+    // const model = '';
 
     try {
         const aiRes = await fetch(apiEndpoint, {
