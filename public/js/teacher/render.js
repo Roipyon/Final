@@ -53,6 +53,7 @@ export const TeacherRender = {
                         <td>${item.class_rank}</td>
                         <td>
                             <button class="btn-sm comment-btn" data-student-id="${item.id}" data-student-name="${escapeHtml(item.studentName)}">评语</button>
+                            <button class="btn-sm trend-btn" data-student-id="${item.id}" data-student-name="${escapeHtml(item.studentName)}">趋势</button>
                         </td>
                     </tr>
                 `;
@@ -66,6 +67,7 @@ export const TeacherRender = {
                         <td>
                             <button class="btn-sm edit-score-btn" data-id="${item.scoreId}" data-subject="${item.subject}" data-score="${item.score}">编辑</button>
                             <button class="btn-sm comment-btn" data-student-id="${item.id}" data-student-name="${escapeHtml(item.studentName)}" data-subject="${escapeHtml(item.subject)}">评语</button>
+                            <button class="btn-sm trend-btn" data-student-id="${item.id}" data-student-name="${escapeHtml(item.studentName)}" data-subject="${escapeHtml(item.subject)}">趋势</button>
                         </td>
                     </tr>
                 `;

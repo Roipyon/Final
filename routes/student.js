@@ -264,7 +264,7 @@ router.get('/diagnosis', async (req, res) => {
             FROM scores s
             WHERE s.student_id = ? ${subjectCondition}
             ORDER BY s.exam_date DESC
-            LIMIT 5
+            LIMIT 6
         ) AS recent 
         ORDER BY exam_date ASC, subject
     `, params);

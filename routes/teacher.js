@@ -663,5 +663,62 @@ router.post('/notices/draft', async (req, res) => {
         res.status(500).json({ success: false, message: '起草失败' });
     }
 });
+// 获取某学生某个科目（或总分）的历次成绩趋势
+router.get('/trend', async (req, res) => {
+    const info = await getTeacherInfo(req.session.account);
+    if (!info || !info.classId) {
+        return res.status(403).json({ success: false, message: '未分配班级' });
+    }
+    const { studentId, subject = '' } = req.query;
+    if (!studentId) return res.status(400).json({ success: false, message: '缺少学生ID' });
+
+    const [member] = await pool.query(
+        'SELECT 1 FROM class_members WHERE class_id = ? AND student_id = ? AND status = 1',
+        [info.classId, studentId]
+    );
+    if (member.length === 0) return res.status(403).json({ success: false, message: '该学生不在您的班级' });
+
+    if (subject && subject !== '总分') {
+        const [rows] = await pool.query(`
+            SELECT DATE_FORMAT(s.exam_date, '%Y-%m-%d') AS exam_date,
+                   s.score, s.full_mark,
+                   ROUND((SELECT AVG(s2.score) FROM scores s2 WHERE s2.class_id = ? AND s2.subject = ? AND s2.exam_date = s.exam_date), 1) AS class_avg
+            FROM scores s
+            WHERE s.student_id = ? AND s.subject = ? AND s.class_id = ?
+            ORDER BY s.exam_date ASC
+            LIMIT 6
+        `, [info.classId, subject, studentId, subject, info.classId]);
+        return res.json(rows);
+    }
+
+    // 总分趋势（最近6次考试）
+    const [rows] = await pool.query(`
+        SELECT DATE_FORMAT(p.exam_date, '%Y-%m-%d') AS exam_date,
+            p.total_score AS score,
+            p.full_mark,
+            ROUND(c.avg_total, 1) AS class_avg
+        FROM (
+            SELECT exam_date,
+                SUM(score) AS total_score,
+                SUM(full_mark) AS full_mark
+            FROM scores
+            WHERE student_id = ? AND class_id = ?
+            GROUP BY exam_date
+        ) p
+        JOIN (
+            SELECT exam_date, AVG(total) AS avg_total
+            FROM (
+                SELECT exam_date, student_id, SUM(score) AS total
+                FROM scores
+                WHERE class_id = ?
+                GROUP BY exam_date, student_id
+            ) t
+            GROUP BY exam_date
+        ) c ON p.exam_date = c.exam_date
+        ORDER BY p.exam_date ASC
+        LIMIT 6
+    `, [studentId, info.classId, info.classId]);
+    res.json(rows);
+});
 
 module.exports = router;

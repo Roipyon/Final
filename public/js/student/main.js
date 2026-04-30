@@ -5,6 +5,7 @@ import { NoticeCard } from '../common/components/NoticeCard.js';
 import { openFilterDrawer, createFilterDrawer } from '../common/filterDrawer.js';
 import { WSClient } from '../common/websocket.js';
 import { Modal } from '../common/components/Modal.js';
+import { drawTrendChart } from '../common/chart.js';
 
 let currentSection = 'home';
 const noticeCardMap = new Map();
@@ -197,13 +198,13 @@ async function renderScoreModule() {
 
     // 获取趋势数据（仅依赖科目，不受考试批次影响）
     trendDataCache = await API.student.getTrend(StudentState.currentSubjectFilter);
-    StudentRender.trendChart(chartContainer, trendDataCache);
+    drawTrendChart(chartContainer, trendDataCache);
 
     // 防抖重绘
     const debouncedRedraw = debounce(() => {
         const container = document.getElementById('trendContainer');
         if (container && trendDataCache) {
-            StudentRender.trendChart(container, trendDataCache);
+            drawTrendChart(container, trendDataCache);
         }
     }, 200);
 

@@ -157,7 +157,12 @@ const API = {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ keywords, style })
-        })
+        }),
+        getTrend: (studentId, subject = '') => {
+            const params = new URLSearchParams({ studentId });
+            if (subject) params.append('subject', subject);
+            return API.request(`/teacher/trend?${params}`);
+        }
     },
 
     // 学生端

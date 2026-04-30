@@ -5,6 +5,7 @@ import { NoticeCard } from '../common/components/NoticeCard.js';
 import { openFilterDrawer, createFilterDrawer } from '../common/filterDrawer.js';
 import { WSClient } from '../common/websocket.js';
 import { Modal } from '../common/components/Modal.js';
+import { drawTrendChart } from '../common/chart.js';
 
 let currentSection = 'home';
 
@@ -524,7 +525,6 @@ function bindGlobalEvents() {
                 e.target.textContent = oldText;
             }
         }
-
         // ai起草通知
         if (e.target.id === 'aiDraftBtn') {
             const btn = e.target;
@@ -549,6 +549,63 @@ function bindGlobalEvents() {
                 btn.textContent = originalText;
             }
             return;
+        }
+        // 趋势图生成
+        if (e.target.classList.contains('trend-btn')) {
+            e.preventDefault();
+            const btn = e.target;
+            const studentId = btn.dataset.studentId;
+            const studentName = btn.dataset.studentName || '';
+            const subject = btn.dataset.subject || '总分';
+
+            const modal = document.createElement('div');
+            modal.className = 'modal-mask';
+            modal.style.display = 'flex';
+            modal.innerHTML = `
+                <div class="modal-container" style="width:90%; max-width:600px; background:white; border-radius:12px; padding:20px; position:relative;">
+                    <button class="modal-close-btn" style="position:absolute; top:10px; right:10px; background:none; border:none; font-size:24px; cursor:pointer;">&times;</button>
+                    <h4 style="margin-bottom:16px;">${escapeHtml(studentName)} · ${escapeHtml(subject)} 成绩趋势</h4>
+                    <div id="trendChartContainer" style="width:100%;">
+                        <div class="skeleton" style="height:180px;"></div>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+
+            let trendData = null;
+            let resizeHandler = null;
+
+            // 关闭清理函数
+            const close = () => {
+                if (resizeHandler) {
+                    window.removeEventListener('resize', resizeHandler);
+                    resizeHandler = null;
+                }
+                modal.remove();
+            };
+            modal.querySelector('.modal-close-btn').addEventListener('click', close);
+            modal.addEventListener('click', (ev) => { if (ev.target === modal) close(); });
+
+            try {
+                trendData = await API.teacher.getTrend(studentId, subject === '总分' ? '' : subject);
+                const chartContainer = document.getElementById('trendChartContainer');
+
+                // 首次绘制
+                drawTrendChart(chartContainer, trendData, { height: 180 });
+
+                // 防抖重绘（复用 utils.js 的 debounce）
+                const debouncedRedraw = debounce(() => {
+                    const container = document.getElementById('trendChartContainer');
+                    if (container && trendData) {
+                        drawTrendChart(container, trendData, { height: 180 });
+                    }
+                }, 200);
+
+                resizeHandler = debouncedRedraw;
+                window.addEventListener('resize', resizeHandler);
+            } catch (err) {
+                document.getElementById('trendChartContainer').innerHTML = `<p style="color:red;">加载失败：${err.message}</p>`;
+            }
         }
     });
 
