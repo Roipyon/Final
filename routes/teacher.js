@@ -3,6 +3,7 @@ const router = express.Router();
 const pool = require('../utils/pool');
 const addLog = require('../utils/logger');
 const { isTeacher } = require('../middleware/auth');
+require('dotenv').config();
 
 router.use(isTeacher);
 
@@ -563,6 +564,102 @@ router.post('/comment', async (req, res) => {
     } catch (err) {
         console.error(err);
         res.status(502).json({ success: false, message: '评语生成失败' });
+    }
+});
+// 通知草稿生成
+router.post('/notices/draft', async (req, res) => {
+    const info = await getTeacherInfo(req.session.account);
+    if (!info || info.identity !== 'teacher') {
+        return res.status(403).json({ success: false, message: '无权限' });
+    }
+    if (!info.classId) {
+        return res.status(400).json({ success: false, message: '未分配班级，无法起草通知' });
+    }
+
+    // 获取班级名称用于占位
+    const [classRows] = await pool.query(
+        `SELECT CONCAT(g.grade_name, c.class_name) AS class_name 
+         FROM classes c JOIN grades g ON c.grade_id = g.id 
+         WHERE c.id = ?`,
+        [info.classId]
+    );
+    const className = classRows[0]?.class_name || '本班';
+
+    const { keywords, style = 'formal' } = req.body;
+    if (!keywords || !keywords.trim()) {
+        return res.status(400).json({ success: false, message: '请提供通知要点' });
+    }
+
+    const styleGuide = style === 'warm' 
+        ? '请使用亲切、温馨的语气，像家人般传递信息。'
+        : '请使用正式、简洁的官方通知语气。';
+
+    const prompt = `
+    你是一位班主任，需要为班级 "${className}" 起草一份通知。
+    通知要点：${keywords.trim()}
+    ${styleGuide}
+    要求：
+    1. 必须生成一个标题和一个正文，标题简洁明了，正文结构完整（包含时间、地点、事项等，若要点中未提及则无需补充）。
+    2. 输出格式为纯文本，第一行为标题（以“标题：”开头），其余为正文（以“正文：”开头），不要添加任何额外解释。
+    3. 不要使用 markdown 标记。
+    `;
+
+    const apiKey = process.env.AI_API_KEY;
+    const apiEndpoint = process.env.AI_API_ENDPOINT;
+    const model = process.env.AI_MODEL;
+
+    if (!apiKey || !apiEndpoint || !model) {
+        return res.status(500).json({ success: false, message: 'AI 服务未配置' });
+    }
+
+    try {
+        const aiRes = await fetch(apiEndpoint, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey}`
+            },
+            body: JSON.stringify({
+                model,
+                messages: [
+                    { role: 'system', content: '你是一个专业的班主任，擅长撰写班级通知。' },
+                    { role: 'user', content: prompt }
+                ],
+                max_tokens: 400,
+                temperature: 0.7
+            })
+        });
+
+        if (!aiRes.ok) {
+            const errText = await aiRes.text();
+            console.error('AI 通知草稿生成失败:', errText);
+            return res.status(502).json({ success: false, message: 'AI 服务暂时不可用' });
+        }
+
+        const aiData = await aiRes.json();
+        const raw = aiData.choices[0].message.content.trim();
+
+        // 解析返回结果
+        let title = '', content = '';
+        const titleMatch = raw.match(/标题[：:]\s*([\s\S]*?)(?=正文[：:]|$)/);
+        const contentMatch = raw.match(/正文[：:]\s*([\s\S]*)/);
+
+        if (titleMatch) title = titleMatch[1].trim();
+        if (contentMatch) content = contentMatch[1].trim();
+
+        // 若解析失败，降级为原始文本
+        if (!title && !content) {
+            const lines = raw.split('\n').filter(l => l.trim());
+            title = lines[0] || '';
+            content = lines.slice(1).join('\n') || '';
+        }
+
+        await addLog(info.userId, info.realName, 'teacher', 'AI通知起草', `起草通知: ${title}`, info.classId);
+
+        res.json({ title, content });
+    } catch (err) {
+        console.error('AI 通知起草异常:', err);
+        res.status(500).json({ success: false, message: '起草失败' });
     }
 });
 

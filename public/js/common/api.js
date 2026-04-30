@@ -153,6 +153,11 @@ const API = {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ studentId, examDate, style, subject })
         }),
+        draftNotice: (keywords, style = 'formal') => API.request('/teacher/notices/draft', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ keywords, style })
+        })
     },
 
     // 学生端

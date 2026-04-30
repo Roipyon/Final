@@ -264,8 +264,19 @@ async function renderNoticeModule() {
         <h3>班级通知管理</h3>
         <div class="card" style="background:#f9f9f9; padding:16px;">
             <h4>发布新通知</h4>
-            <div class="form-group"><label>标题</label><input type="text" id="newTitle" placeholder="通知标题" style="outline:none;"></div>
-            <div class="form-group"><label>内容</label><textarea id="newContent" rows="4" style="outline:none;resize:none;" placeholder="通知内容"></textarea></div>
+            <div class="form-group">
+                <label>通知要点 <span style="font-weight:normal;color:#888;">（填写后点击 AI 生成）</span></label>
+                <div style="display:flex; gap:8px;">
+                    <input type="text" id="noticeKeywords" placeholder="例如：周五19:00线上家长会" style="flex:1;">
+                    <select id="noticeStyle" class="filter-select" style="width:auto;">
+                        <option value="formal">正式公告</option>
+                        <option value="warm">温馨提醒</option>
+                    </select>
+                    <button id="aiDraftBtn" class="btn-sm">AI 生成</button>
+                </div>
+            </div>
+            <div class="form-group"><label>标题</label><input type="text" id="newTitle" placeholder="自动生成后可手动修改"></div>
+            <div class="form-group"><label>内容</label><textarea id="newContent" rows="4" placeholder="自动生成后可手动修改" style="resize: none;"></textarea></div>
             <button id="publishNoticeBtn" class="btn-primary">发布通知</button>
         </div>
         <div style="display:flex;justify-content:space-between;align-items:center;">
@@ -512,6 +523,32 @@ function bindGlobalEvents() {
                 e.target.disabled = false;
                 e.target.textContent = oldText;
             }
+        }
+
+        // ai起草通知
+        if (e.target.id === 'aiDraftBtn') {
+            const btn = e.target;
+            const keywords = document.getElementById('noticeKeywords')?.value?.trim();
+            if (!keywords) return Modal.alert('请先输入通知要点');
+
+            const style = document.getElementById('noticeStyle')?.value || 'formal';
+            const originalText = btn.textContent;
+            btn.disabled = true;
+            btn.textContent = '生成中...';
+
+            try {
+                const res = await API.teacher.draftNotice(keywords, style);
+                const titleInput = document.getElementById('newTitle');
+                const contentInput = document.getElementById('newContent');
+                if (titleInput) titleInput.value = res.title || '';
+                if (contentInput) contentInput.value = res.content || '';
+            } catch (err) {
+                Modal.alert(err.message || '生成失败');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = originalText;
+            }
+            return;
         }
     });
 
