@@ -208,8 +208,11 @@ router.get('/scores', async (req, res) => {
         const [scores] = await pool.query(dataSQL, dataParams);
         if (isExport) total = scores.length;
 
+        // 确保 score 为数值类型（mysql2 可能返回字符串）
+        const safeData = scores.map(row => ({ ...row, score: parseFloat(row.score) || 0 }));
+
         res.json({
-            data: scores,
+            data: safeData,
             total,
             page: parseInt(page),
             pageSize: limit,
@@ -248,11 +251,13 @@ router.get('/totalscores', async (req, res) => {
         const {
             exam_date = '', class_name = '所有班级',
             page = 1, pageSize = 20,
-            sortField = 'totalScore', sortOrder = 'desc'
+            sortField = 'totalScore', sortOrder = 'desc',
+            all = 'false'
         } = req.query;
 
         const limit = parseInt(pageSize);
         const offset = (parseInt(page) - 1) * limit;
+        const isExport = all === 'true';
 
         const conditions = [];
         const params = [];
@@ -294,25 +299,28 @@ router.get('/totalscores', async (req, res) => {
         const [statsRows] = await pool.query(statsSQL, statsParams);
         const stats = statsRows[0] || {};
 
-        // 总数
-        let countSQL = `
-            SELECT COUNT(*) AS total FROM (
-                SELECT u.id, CONCAT(g.grade_name, c.class_name) AS className
-                FROM scores s
-                INNER JOIN users u ON s.student_id = u.id
-                INNER JOIN classes c ON s.class_id = c.id
-                INNER JOIN grades g ON g.id = c.grade_id
-                ${whereSQL}
-                GROUP BY u.id, c.id
-            ) AS student_list
-        `;
-        const countParams = [...params];
-        if (class_name && class_name !== '所有班级') {
-            countSQL += ' WHERE className = ?';
-            countParams.push(class_name);
+        // 总数（仅分页时需要）
+        let total = 0;
+        if (!isExport) {
+            let countSQL = `
+                SELECT COUNT(*) AS total FROM (
+                    SELECT u.id, CONCAT(g.grade_name, c.class_name) AS className
+                    FROM scores s
+                    INNER JOIN users u ON s.student_id = u.id
+                    INNER JOIN classes c ON s.class_id = c.id
+                    INNER JOIN grades g ON g.id = c.grade_id
+                    ${whereSQL}
+                    GROUP BY u.id, c.id
+                ) AS student_list
+            `;
+            const countParams = [...params];
+            if (class_name && class_name !== '所有班级') {
+                countSQL += ' WHERE className = ?';
+                countParams.push(class_name);
+            }
+            const [countRows] = await pool.query(countSQL, countParams);
+            total = countRows[0].total;
         }
-        const [countRows] = await pool.query(countSQL, countParams);
-        const total = countRows[0].total;
 
         // 分页数据
         let dataSQL = `
@@ -333,8 +341,11 @@ router.get('/totalscores', async (req, res) => {
             dataSQL += ' HAVING className = ?';
             havingParams.push(class_name);
         }
-        dataSQL += ` ORDER BY ${orderBy} ${direction} LIMIT ? OFFSET ?`;
-        havingParams.push(limit, offset);
+        dataSQL += ` ORDER BY ${orderBy} ${direction}`;
+        if (!isExport) {
+            dataSQL += ' LIMIT ? OFFSET ?';
+            havingParams.push(limit, offset);
+        }
         const [rows] = await pool.query(dataSQL, havingParams);
 
         const result = rows.map(row => ({
@@ -347,6 +358,8 @@ router.get('/totalscores', async (req, res) => {
             class_rank: row.total_rank,
             class_rank_in_class: row.class_rank_in_class
         }));
+
+        if (isExport) total = result.length;
 
         res.json({
             data: result,
@@ -662,7 +675,7 @@ router.post('/fullmark', async (req, res) => {
     const { subject } = req.body;
     try {
         const [rows] = await pool.query('SELECT full_mark FROM scores WHERE subject = ? LIMIT 1', [subject]);
-        res.json({ full_mark: rows.length ? rows[0].full_mark : 100 });
+        res.json({ full_mark: rows.length ? Number(rows[0].full_mark) : 100 });
     } catch (err) {
         console.error(err);
         res.status(500).json({ full_mark: 100 });

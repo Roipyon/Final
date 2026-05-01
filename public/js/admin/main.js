@@ -1,7 +1,8 @@
-// 教务端主入口 
+// 教务端主入口
 
 import { AdminState, filterScores, sortScores, getAvailableSortFields } from './state.js';
 import { AdminRender } from './render.js';
+import { drawNormalDistributionChart } from '../common/chart.js';
 import { NoticeCard } from '../common/components/NoticeCard.js';
 import { openFilterDrawer, closeFilterDrawer, createFilterDrawer } from '../common/filterDrawer.js';
 import { WSClient } from '../common/websocket.js';
@@ -9,6 +10,7 @@ import { Modal } from '../common/components/Modal.js';
 import { openActionSheet, closeActionSheet } from '../common/actionSheet.js';
 
 let currentSection = 'dashboard';
+let distResizeHandler = null;  // 分布图 resize 防抖句柄
 
 // 数据加载 
 async function loadBaseData() {
@@ -97,6 +99,30 @@ async function loadScoresData() {
     AdminState.hasExamDate = res.hasExamDate;
 }
 
+// 获取全量成绩数据（all:true，用于导出/图表）
+async function fetchAllScoresData() {
+    const isTotal = AdminState.globalSubjectFilter === '总分';
+    const params = {
+        exam_date: AdminState.currentExamDate,
+        class_name: AdminState.globalClassFilter,
+        sortField: AdminState.currentSortField,
+        sortOrder: AdminState.currentSortOrder,
+        all: 'true'
+    };
+    if (!isTotal) {
+        params.subject = AdminState.globalSubjectFilter;
+    }
+    let res;
+    if (isTotal) {
+        res = await API.admin.getTotalScores(params);
+    } else {
+        res = await API.admin.getScores(params);
+    }
+    // 复用 processScoreRes 统一处理 total_score → score 映射
+    const { allScores } = processScoreRes(res, isTotal);
+    return allScores;
+}
+
 async function renderScoreAll() {
     const isTotal = AdminState.globalSubjectFilter === '总分';
     if (isTotal && !AdminState.currentExamDate) {
@@ -124,7 +150,7 @@ async function renderScoreAll() {
     const totalPages = Math.ceil(AdminState.scoresTotalCount / AdminState.scoresPageSize);
     const paginationHTML = renderSmartPagination(AdminState.scoresCurrentPage, totalPages);
     
-    const statsHTML = AdminState.hasExamDate 
+    const statsHTML = AdminState.hasExamDate
     ? AdminRender.statsCards(AdminState.currentStats, isTotal)
     : '<div class="empty-stats-tip">请选择具体考试批次以查看统计数据</div>';
 
@@ -136,11 +162,62 @@ async function renderScoreAll() {
         </button>
         ${AdminRender.filterBar()}
         ${statsHTML}
+        <div class="chart-container" id="distChartContainer">
+            <div class="chart-title">成绩分布</div>
+        </div>
         <div class="table-wrapper">
             ${AdminRender.scoreTable(sortedData, isTotal, hasExamDate)}
         </div>
         ${paginationHTML}
     `;
+
+    // 绘制正态分布图（使用全量数据）
+    if (AdminState.hasExamDate) {
+        // 清除旧 resize 监听
+        if (distResizeHandler) {
+            window.removeEventListener('resize', distResizeHandler);
+            distResizeHandler = null;
+        }
+
+        const allChartData = await fetchAllScoresData();
+        const chartFiltered = filterScores(allChartData, isTotal);
+        if (chartFiltered.length >= 3) {
+            const scoreValues = chartFiltered.map(d => d.score);
+            const chartBox = document.getElementById('distChartContainer');
+            const chartOptions = {
+                title: isTotal ? '总分分布' : `${AdminState.globalSubjectFilter}成绩分布`
+            };
+            // 获取真实满分
+            if (isTotal) {
+                // 总分 = 各科目满分之和
+                const subjects = (AdminState.allSubjects || []).filter(s => s !== '总分');
+                let totalFullMark = 0;
+                try {
+                    const results = await Promise.all(subjects.map(s => API.admin.getFullMark(s)));
+                    totalFullMark = results.reduce((sum, r) => sum + (r.full_mark || 0), 0);
+                } catch (e) { /* 忽略 */ }
+                chartOptions.maxScore = totalFullMark || 100;
+            } else {
+                try {
+                    const fmRes = await API.admin.getFullMark(AdminState.globalSubjectFilter);
+                    chartOptions.maxScore = fmRes.full_mark || 100;
+                } catch (e) {
+                    chartOptions.maxScore = 100;
+                }
+            }
+            drawNormalDistributionChart(chartBox, scoreValues, chartOptions);
+
+            // 防抖重绘（resize 时）
+            const debouncedRedraw = debounce(() => {
+                const container = document.getElementById('distChartContainer');
+                if (container && scoreValues) {
+                    drawNormalDistributionChart(container, scoreValues, chartOptions);
+                }
+            }, 200);
+            distResizeHandler = debouncedRedraw;
+            window.addEventListener('resize', distResizeHandler);
+        }
+    }
 
     document.getElementById('mobileFilterBtn')?.addEventListener('click', () => {
         const filterBar = document.querySelector('.filter-bar');
@@ -899,11 +976,7 @@ async function confirmAddScore() {
                 return;
             }
             // 满分校验
-            const fullRes = await API.request('/admin/fullmark', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ subject })
-            });
+            const fullRes = await API.admin.getFullMark(subject);
             const fullMark = fullRes.full_mark || 100;
             if (isNaN(score) || score < 0 || score > fullMark) {
                 Modal.alert(`成绩必须在 0-${fullMark} 之间`);
@@ -942,11 +1015,7 @@ async function confirmEditScore() {
             }
             
             try {
-                const fullRes = await API.request('/admin/fullmark', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ subject: scoreItem.subject })
-                });
+                const fullRes = await API.admin.getFullMark(scoreItem.subject);
                 const fullMark = fullRes.full_mark || 100;
                 if (isNaN(newScore) || newScore < 0 || newScore > fullMark) {
                     Modal.alert(`请输入有效的成绩 (0-${fullMark})`);
@@ -1114,25 +1183,7 @@ function updateSortButtonText() {
 
 async function exportCSV() {
     const isTotal = AdminState.globalSubjectFilter === '总分';
-    const params = {
-        exam_date: AdminState.currentExamDate,
-        class_name: AdminState.globalClassFilter,
-        sortField: AdminState.currentSortField,
-        sortOrder: AdminState.currentSortOrder,
-        all: 'true'                 // 请求全量数据
-    };
-    if (!isTotal) {
-        params.subject = AdminState.globalSubjectFilter;
-    }
-
-    let res;
-    if (isTotal) {
-        res = await API.admin.getTotalScores(params);
-    } else {
-        res = await API.admin.getScores(params);
-    }
-
-    const allData = res.data;
+    const allData = await fetchAllScoresData();
     // 应用搜索关键词过滤
     const filtered = filterScores(allData, isTotal);
     const hasExamDate = !!AdminState.currentExamDate;

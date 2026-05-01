@@ -265,7 +265,7 @@ button.btn-sm {
 }
 
 .stat-value {
-    font-size: 28px;
+    font-size: 34px;
     font-weight: 700;
     color: var(--primary);
 }
@@ -290,7 +290,8 @@ button.btn-sm {
     display: flex;
     justify-content: flex-end;
     gap: 8px;
-    margin-top: 20px;
+    margin-top: 24px;
+    margin-bottom: 8px;
     flex-wrap: wrap;
 }
 
@@ -943,6 +944,22 @@ hr {
     .class-card .mobile-actions { display: none !important; }
 }
 
+.chart-container {
+    background: var(--gray-light);
+    border-radius: 12px;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+}
+.chart-container .chart-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--gray-dark);
+    margin-bottom: 4px;
+}
+.chart-container canvas {
+    border-radius: 8px;
+}
+
 select {
-   outline: none; 
+   outline: none;
 }

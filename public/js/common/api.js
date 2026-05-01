@@ -102,6 +102,11 @@ const API = {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name })
         }),
+        getFullMark: (subject) => API.request('/admin/fullmark', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ subject })
+        }),
     },
 
     // 教师端

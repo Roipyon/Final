@@ -214,7 +214,7 @@ router.get('/subjectgeneral', async (req, res) => {
 router.post('/fullmark', async (req, res) => {
     const { subject } = req.body;
     const [rows] = await pool.query('SELECT full_mark FROM scores WHERE subject = ? LIMIT 1', [subject]);
-    res.json(rows[0]);
+    res.json({ full_mark: rows.length ? Number(rows[0].full_mark) : 100 });
 });
 
 // 根据成绩ID修改成绩
